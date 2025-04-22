@@ -45,7 +45,8 @@ with col1:
     # Fix: Ensure that scraping process works properly
     if scrape_trigger and brand_inputs:
         with st.spinner("Scraping brand data..."):
-            brand_data = scrape_all_sources(gender, season, brand_inputs)  # Use correct scraping logic
+            brand_data = scrape_all_sources(brand_inputs)
+
             if not brand_data:
                 st.warning("No data scraped. Please check the category URLs and try again.")
             else:
