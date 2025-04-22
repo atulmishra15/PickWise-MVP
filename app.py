@@ -7,7 +7,7 @@ import streamlit as st
 from attribute_extractor import enrich_attributes_from_images
 from scraper import scrape_all_sources
 from buyability_score import compute_buyability_scores
-from recommendation import get_top_n_recommendations
+from recommendation import recommend_top_n
 from visualizer import visualize_buyability_breakdown, visualize_candidate_vs_market
 
 st.set_page_config(page_title="PickWise", layout="wide")
