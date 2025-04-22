@@ -1,50 +1,71 @@
 import pandas as pd
+import numpy as np
+from sklearn.metrics.pairwise import cosine_distances
+from sklearn.preprocessing import MultiLabelBinarizer
 
-def refine_recommendations(scored_df, prompt=None, top_n=12, price_min=None, price_max=None):
-    """
-    Refines buyability recommendations based on buyer input.
-    
-    Parameters:
-    - scored_df: DataFrame with product info and buyability_score
-    - prompt: String with refinement instructions (e.g. "more red, reduce browns")
-    - top_n: Number of final recommendations to return
-    - price_min: Optional price floor
-    - price_max: Optional price ceiling
-    
-    Returns:
-    - Refined DataFrame with top-N recommendations
-    """
+# Default weights (can be overridden via UI sliders)
+DEFAULT_WEIGHTS = {
+    "newness_to_market": 0.4,
+    "newness_to_brand": 0.2,
+    "variety": 0.2,
+    "completeness": 0.2
+}
 
-    df = scored_df.copy()
+def compute_buyability_scores(df: pd.DataFrame, past_brand_df: pd.DataFrame, competitor_df: pd.DataFrame, weights: dict = DEFAULT_WEIGHTS) -> pd.DataFrame:
+    enriched_df = df.copy()
 
-    # Price filtering
-    if price_min is not None:
-        df = df[df['price'] >= price_min]
-    if price_max is not None:
-        df = df[df['price'] <= price_max]
+    # Extract and binarize relevant attributes
+    attributes = ["style", "material", "color", "print", "length", "occasion", "neckline", "sleeve_type", "texture"]
+    mlb = MultiLabelBinarizer()
+    all_tags = enriched_df[attributes].fillna('').agg(lambda x: list(set(filter(None, x))), axis=1)
+    tag_matrix = mlb.fit_transform(all_tags)
 
-    # Handle color/attribute-based refinements
+    # --- 1. Newness to Market ---
+    comp_tags = competitor_df[attributes].fillna('').agg(lambda x: list(set(filter(None, x))), axis=1)
+    comp_matrix = mlb.transform(comp_tags)
+    dist_to_market = cosine_distances(tag_matrix, comp_matrix).mean(axis=1)
+
+    # --- 2. Newness to Brand ---
+    brand_tags = past_brand_df[attributes].fillna('').agg(lambda x: list(set(filter(None, x))), axis=1)
+    brand_matrix = mlb.transform(brand_tags)
+    dist_to_brand = cosine_distances(tag_matrix, brand_matrix).mean(axis=1)
+
+    # --- 3. Variety Within Selection ---
+    dist_within = cosine_distances(tag_matrix)
+    diversity_scores = dist_within.mean(axis=1)
+
+    # --- 4. Completeness Score (balance of attributes)
+    def completeness(row):
+        return np.mean([1 if row[attr] else 0 for attr in attributes])
+    completeness_scores = enriched_df.apply(completeness, axis=1)
+
+    # Weighted Final Score
+    enriched_df["score_newness_market"] = dist_to_market
+    enriched_df["score_newness_brand"] = dist_to_brand
+    enriched_df["score_variety"] = diversity_scores
+    enriched_df["score_completeness"] = completeness_scores
+
+    enriched_df["buyability_score"] = (
+        weights["newness_to_market"] * dist_to_market +
+        weights["newness_to_brand"] * dist_to_brand +
+        weights["variety"] * diversity_scores +
+        weights["completeness"] * completeness_scores
+    )
+
+    return enriched_df.sort_values(by="buyability_score", ascending=False).reset_index(drop=True)
+
+
+def recommend_top_n(df: pd.DataFrame, top_n: int = 12, prompt_filters: str = "") -> pd.DataFrame:
+    # Simple text filter (future: NLP)
+    prompt = prompt_filters.lower()
     if prompt:
-        prompt = prompt.lower()
+        if "red" in prompt:
+            df.loc[df['color'].str.contains("red", na=False), 'buyability_score'] += 0.05
+        if "floral" in prompt and "less" in prompt:
+            df.loc[df['print'].str.contains("floral", na=False), 'buyability_score'] -= 0.05
+        if "formal" in prompt:
+            df.loc[df['occasion'].str.contains("formal", na=False), 'buyability_score'] += 0.05
 
-        # Example logic: adjust scores based on color mentions
-        if "more red" in prompt:
-            df['boost_red'] = df['color'].str.contains("red", case=False, na=False).astype(int)
-            df['buyability_score'] += 0.1 * df['boost_red']
-        if "fewer brown" in prompt:
-            df['penalty_brown'] = df['color'].str.contains("brown", case=False, na=False).astype(int)
-            df['buyability_score'] -= 0.1 * df['penalty_brown']
-        if "more prints" in prompt:
-            df['boost_print'] = df['print'].str.contains("print|pattern", case=False, na=False).astype(int)
-            df['buyability_score'] += 0.1 * df['boost_print']
-        if "reduce solid" in prompt:
-            df['penalty_solid'] = df['print'].str.contains("solid", case=False, na=False).astype(int)
-            df['buyability_score'] -= 0.1 * df['penalty_solid']
-
-        # You can expand this logic with additional keywords
-
-    # Final top-N selection
-    df = df.sort_values(by='buyability_score', ascending=False).head(top_n)
-
-    return df
-# Build a logic that selects top N products with variety and completeness balance
+    top_df = df.sort_values(by="buyability_score", ascending=False).head(top_n).copy()
+    top_df['tags'] = top_df.apply(lambda row: list(filter(None, [row.get(attr) for attr in ["style", "material", "color", "print", "length", "occasion"]])), axis=1)
+    return top_df
