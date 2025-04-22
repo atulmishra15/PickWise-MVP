@@ -1,77 +1,51 @@
 import streamlit as st
 import pandas as pd
-import tempfile
-import os
 from scraper import scrape_all_sources
 from attribute_extractor import enrich_attributes
-from buyability_score import compute_buyability_scores, recommend_top_n, DEFAULT_WEIGHTS
-from visualizer import show_score_breakdown_chart, show_attribute_heatmap, show_diversity_matrix
-from sklearn.metrics.pairwise import cosine_distances
+from scoring import compute_buyability_scores
+from recommendation import recommend_top_n
+from visualizer import visualize_heatmap, plot_attribute_distribution
 
-st.set_page_config(page_title="PickWise – Smarter Choices. Sharper Assortments.", layout="wide")
-st.image("pickwise_logo.png", width=200)
-st.title("PickWise: Smarter Choices. Sharper Assortments.")
+st.set_page_config(page_title="PickWise", layout="wide")
+st.title("PickWise – Smarter Choices. Sharper Assortments.")
 
-st.sidebar.header("1. Input Controls")
-mode = st.sidebar.radio("Choose input mode:", ["Live Scraping", "Upload Candidate Images"])
+st.subheader("Step 1: Provide category scraping links")
+category = st.selectbox("Select Category", ["Dresses", "T-Shirts", "Handbags", "Shirts"])
+gender = st.selectbox("Select Gender", ["Women", "Men", "Girls", "Boys"])
+season = st.selectbox("Select Season", ["SS", "FW", "Transitional"])
 
-category = st.sidebar.selectbox("Category", ["dresses", "handbags", "t-shirts"])
-gender = st.sidebar.selectbox("Gender", ["women", "men", "kids"])
-season = st.sidebar.selectbox("Season", ["spring", "summer", "autumn", "winter"])
-top_n = st.sidebar.slider("Top N Recommendations", 6, 30, 12)
+st.markdown("### Enter product listing URLs:")
+urls = {}
+urls["maxfashion_new"] = st.text_input("Max Fashion - New Designs URL")
+urls["maxfashion_past"] = st.text_input("Max Fashion - Past Designs URL")
+urls["shein_new"] = st.text_input("Shein - New Designs URL")
+urls["shein"] = st.text_input("Shein - Market URL")
+urls["hnm"] = st.text_input("H&M - Market URL")
+urls["zara"] = st.text_input("Zara - Market URL")
+urls["splash"] = st.text_input("Splash - Market URL")
 
-st.sidebar.header("2. Scoring Weights")
-newness_market = st.sidebar.slider("Newness to Market", 0.0, 1.0, DEFAULT_WEIGHTS["newness_to_market"])
-newness_brand = st.sidebar.slider("Newness to Brand", 0.0, 1.0, DEFAULT_WEIGHTS["newness_to_brand"])
-variety = st.sidebar.slider("Variety", 0.0, 1.0, DEFAULT_WEIGHTS["variety"])
-completeness = st.sidebar.slider("Completeness", 0.0, 1.0, DEFAULT_WEIGHTS["completeness"])
+run_button = st.button("Run Analysis")
 
-weights = {
-    "newness_to_market": newness_market,
-    "newness_to_brand": newness_brand,
-    "variety": variety,
-    "completeness": completeness
-}
+if run_button:
+    with st.spinner("Scraping and analyzing..."):
+        try:
+            df_new, df_past, df_comp = scrape_all_sources(category, gender, season, urls)
 
-st.sidebar.header("3. Optional Prompt Refinement")
-prompt = st.sidebar.text_input("e.g., more red long dresses, less floral prints")
+            enriched_new = enrich_attributes(df_new)
+            enriched_past = enrich_attributes(df_past)
+            enriched_comp = enrich_attributes(df_comp)
 
-if mode == "Live Scraping":
-    if st.button("Run Scraper and Generate Recommendations"):
-        with st.spinner("Scraping products and computing recommendations..."):
-            df_new, df_past, df_comp = scrape_all_sources(category, gender, season)
-            df_enriched = enrich_attributes(df_new)
-            df_scored = compute_buyability_scores(df_enriched, df_past, df_comp, weights)
-            df_top = recommend_top_n(df_scored, top_n, prompt)
+            scored_df = compute_buyability_scores(enriched_new, enriched_past, enriched_comp)
+            st.success("Buyability scores computed.")
 
-            st.success("Done! Here are your recommendations:")
-            st.dataframe(df_top)
+            top_n = st.slider("Select number of top options to recommend:", 5, 20, 12)
+            recommended = recommend_top_n(scored_df, top_n)
+            st.subheader("Top Recommendations")
+            st.dataframe(recommended)
 
-            # Visualizations
-            show_score_breakdown_chart(df_top)
-            show_attribute_heatmap(df_top)
-            similarity_matrix = cosine_distances(df_top[["score_newness_market", "score_newness_brand", "score_variety", "score_completeness"]])
-            show_diversity_matrix(df_top, similarity_matrix)
+            st.subheader("Visual Comparison")
+            visualize_heatmap(scored_df)
+            plot_attribute_distribution(scored_df)
 
-elif mode == "Upload Candidate Images":
-    uploaded_files = st.file_uploader("Upload candidate product images", type=["jpg", "png"], accept_multiple_files=True)
-    if st.button("Process Uploaded Designs") and uploaded_files:
-        with st.spinner("Extracting attributes and computing scores..."):
-            temp_dir = tempfile.mkdtemp()
-            for file in uploaded_files:
-                with open(os.path.join(temp_dir, file.name), "wb") as f:
-                    f.write(file.read())
-
-            df_new, df_past, df_comp = scrape_all_sources(category, gender, season)
-            df_enriched = enrich_attributes(temp_dir, from_images=True)
-            df_scored = compute_buyability_scores(df_enriched, df_past, df_comp, weights)
-            df_top = recommend_top_n(df_scored, top_n, prompt)
-
-            st.success("Done! Here are your recommendations:")
-            st.dataframe(df_top)
-
-            # Visualizations
-            show_score_breakdown_chart(df_top)
-            show_attribute_heatmap(df_top)
-            similarity_matrix = cosine_distances(df_top[["score_newness_market", "score_newness_brand", "score_variety", "score_completeness"]])
-            show_diversity_matrix(df_top, similarity_matrix)
+        except Exception as e:
+            st.error(f"Error during processing: {e}")
