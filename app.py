@@ -15,17 +15,23 @@ with st.sidebar:
     gender = st.selectbox("Gender", ["Women", "Men", "Kids"])
     season = st.selectbox("Season", ["Spring", "Summer", "Autumn", "Winter"])
 
+    def brand_url_input(i):
+        col1, col2 = st.columns([1, 3])
+        with col1:
+            brand = st.selectbox(
+                f"Brand {i+1}",
+                ["H&M", "Zara", "MaxFashion", "Splash", "Shein"],
+                key=f"brand_{i}"
+            )
+        with col2:
+            url = st.text_input(f"Category URL {i+1}", key=f"url_{i}")
+        return brand, url
+
     with st.expander("1. Scrape Brand Data"):
         brand_inputs = []
         num_urls = st.slider("Number of brand-category URLs", 1, 5, 2)
         for i in range(num_urls):
-            col1, col2 = st.columns([1, 3])
-            with col1:
-                # Make the brand input box unique with key=f"brand_{i}"
-                brand = st.selectbox(f"Brand {i+1}", ["H&M", "Zara", "MaxFashion", "Splash", "Shein"], key=f"brand_{i}")
-            with col2:
-                # Make the URL input box unique with key=f"url_{i}"
-                url = st.text_input(f"Category URL {i+1}", key=f"url_{i}")
+            brand, url = brand_url_input(i)
             if url:
                 brand_inputs.append((brand, url))
         scrape_trigger = st.button("🔍 Scrape Brand Data")
@@ -42,25 +48,24 @@ with col1:
     brand_data = {}
     candidate_data = None
 
-    # Fix: Ensure that scraping process works properly
+    # Scraping process
     if scrape_trigger and brand_inputs:
         with st.spinner("Scraping brand data..."):
-            brand_data = scrape_all_sources(brand_inputs)
-
+            brand_data = scrape_all_sources(gender, season, brand_inputs)
             if not brand_data:
                 st.warning("No data scraped. Please check the category URLs and try again.")
             else:
                 st.success("Scraping completed!")
 
-    # Fix: Process candidate designs correctly
+    # Process candidate designs
     if candidate_files:
         with st.spinner("Extracting candidate attributes..."):
-            candidate_data = enrich_and_export_attributes(candidate_files)  # Process uploaded images
+            candidate_data = enrich_and_export_attributes(candidate_files)
 
         for brand, df in brand_data.items():
             brand_data[brand] = enrich_and_export_attributes(df)
 
-    # Only proceed with recommendations if data exists
+    # Recommendations and visualizations
     if candidate_data is not None and brand_data:
         all_market_data = pd.concat(brand_data.values(), ignore_index=True)
         scored_candidates = compute_buyability_scores(candidate_data, all_market_data)
