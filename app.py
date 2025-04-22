@@ -4,7 +4,6 @@ from attribute_extractor import enrich_attributes_from_images as enrich_and_expo
 from scraper import scrape_all_sources
 from buyability_score import compute_buyability_scores, recommend_top_n
 from visualizer import visualize_buyability_breakdown, visualize_candidate_vs_market, visualize_brand_vs_brand
-from utils import load_uploaded_images
 
 st.set_page_config(page_title="PickWise – Smarter Choices. Sharper Assortments.", layout="wide")
 st.title("🧠 PickWise")
@@ -41,18 +40,24 @@ with col1:
     brand_data = {}
     candidate_data = None
 
+    # Fix: Ensure that scraping process works properly
     if scrape_trigger and brand_inputs:
         with st.spinner("Scraping brand data..."):
-            brand_data = scrape_all_sources(gender, season, brand_inputs)
-            st.success("Scraping completed!")
+            brand_data = scrape_all_sources(gender, season, brand_inputs)  # Use correct scraping logic
+            if not brand_data:
+                st.warning("No data scraped. Please check the category URLs and try again.")
+            else:
+                st.success("Scraping completed!")
 
+    # Fix: Process candidate designs correctly
     if candidate_files:
         with st.spinner("Extracting candidate attributes..."):
-            candidate_data = enrich_and_export_attributes(candidate_files)
+            candidate_data = enrich_and_export_attributes(candidate_files)  # Process uploaded images
 
         for brand, df in brand_data.items():
             brand_data[brand] = enrich_and_export_attributes(df)
 
+    # Only proceed with recommendations if data exists
     if candidate_data is not None and brand_data:
         all_market_data = pd.concat(brand_data.values(), ignore_index=True)
         scored_candidates = compute_buyability_scores(candidate_data, all_market_data)
