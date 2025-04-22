@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from attribute_extractor import enrich_attributes_from_images as enrich_and_export_attributes
-from scraper import scrape_all_sources
+from scraper import scrape_all_sources, detect_brand_from_url
 from buyability_score import compute_buyability_scores, recommend_top_n
 from visualizer import visualize_buyability_breakdown, visualize_candidate_vs_market, visualize_brand_vs_brand
 
@@ -15,25 +15,13 @@ with st.sidebar:
     gender = st.selectbox("Gender", ["Women", "Men", "Kids"])
     season = st.selectbox("Season", ["Spring", "Summer", "Autumn", "Winter"])
 
-    def brand_url_input(i):
-        col1, col2 = st.columns([1, 3])
-        with col1:
-            brand = st.selectbox(
-                f"Brand {i+1}",
-                ["H&M", "Zara", "MaxFashion", "Splash", "Shein"],
-                key=f"brand_{i}"
-            )
-        with col2:
-            url = st.text_input(f"Category URL {i+1}", key=f"url_{i}")
-        return brand, url
-
     with st.expander("1. Scrape Brand Data"):
-        brand_inputs = []
-        num_urls = st.slider("Number of brand-category URLs", 1, 5, 2)
+        category_urls = []
+        num_urls = st.slider("Number of category URLs", 1, 5, 2)
         for i in range(num_urls):
-            brand, url = brand_url_input(i)
+            url = st.text_input(f"Category URL {i+1}", key=f"url_{i}")
             if url:
-                brand_inputs.append((brand, url))
+                category_urls.append(url)
         scrape_trigger = st.button("🔍 Scrape Brand Data")
 
     with st.expander("2. Upload Candidate Designs"):
@@ -49,8 +37,9 @@ with col1:
     candidate_data = None
 
     # Scraping process
-    if scrape_trigger and brand_inputs:
+    if scrape_trigger and category_urls:
         with st.spinner("Scraping brand data..."):
+            brand_inputs = [(detect_brand_from_url(url), url) for url in category_urls]
             brand_data = scrape_all_sources(gender, season, brand_inputs)
             if not brand_data:
                 st.warning("No data scraped. Please check the category URLs and try again.")
@@ -86,4 +75,4 @@ with col1:
         visualize_brand_vs_brand(brand_data)
 
 with col2:
-    st.info("📘 Instructions:\n\n1. Add brand URLs by category.\n2. Upload your candidate designs.\n3. See top picks and market-fit visuals!")
+    st.info("📘 Instructions:\n\n1. Paste category URLs (we’ll detect the brand).\n2. Upload your candidate designs.\n3. See top picks and market-fit visuals!")
