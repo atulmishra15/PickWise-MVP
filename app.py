@@ -21,8 +21,10 @@ with st.sidebar:
         for i in range(num_urls):
             col1, col2 = st.columns([1, 3])
             with col1:
+                # Make the brand input box unique with key=f"brand_{i}"
                 brand = st.selectbox(f"Brand {i+1}", ["H&M", "Zara", "MaxFashion", "Splash", "Shein"], key=f"brand_{i}")
             with col2:
+                # Make the URL input box unique with key=f"url_{i}"
                 url = st.text_input(f"Category URL {i+1}", key=f"url_{i}")
             if url:
                 brand_inputs.append((brand, url))
