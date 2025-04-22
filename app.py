@@ -6,7 +6,7 @@ from PIL import Image
 import streamlit as st
 from attribute_extractor import enrich_attributes_from_images
 from scraper import scrape_all_sources
-from scoring import compute_buyability_scores
+from buyability_score import compute_buyability_scores
 from recommendation import get_top_n_recommendations
 from visualizer import visualize_buyability_breakdown, visualize_candidate_vs_market
 
