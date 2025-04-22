@@ -1,79 +1,100 @@
-# app.py
-
 import streamlit as st
 import pandas as pd
-from scraper import scrape_category
-from attribute_extractor import extract_attributes_from_images, extract_attributes_from_df
-from buyability_score import calculate_buyability_score
+import os
+from scraper import scrape_category_data  # assume this returns a DataFrame
+from attribute_extractor import extract_attributes_from_df
+from buyability_score import compute_buyability_scores
+from recommendation import refine_recommendations
 
-st.set_page_config(page_title="PickWise", layout="wide")
+st.set_page_config(page_title="PickWise – Smarter Choices. Sharper Assortments.", layout="wide")
 
-st.title("🛍️ PickWise – Smarter Choices. Sharper Assortments.")
-st.markdown("Select mode to provide candidate products – either scrape from brand websites or upload your own designs.")
+st.title("🧠 PickWise – Smarter Choices. Sharper Assortments.")
+st.markdown("Start with either scraping competitor data or uploading your candidate designs.")
 
-mode = st.radio("Choose Input Mode:", ["Scrape from Brands", "Upload Candidate Designs"])
+# --- Tabs for user flow ---
+tab1, tab2 = st.tabs(["🛍️ Scrape Competitor Data", "📤 Upload Candidate Designs"])
 
-candidate_df = None
+with tab1:
+    st.header("Scrape Top 150 Products")
 
-if mode == "Scrape from Brands":
-    with st.form("scrape_form"):
-        brand = st.selectbox("Select Brand", ["H&M", "Zara", "Max", "Splash", "Shein"])
-        category = st.selectbox("Select Category", ["Dresses", "T-Shirts", "Handbags", "Character Tops"])
-        gender = st.selectbox("Select Gender", ["Women", "Men", "Kids"])
-        season = st.selectbox("Select Season", ["Spring", "Summer", "Fall", "Winter"])
-        url = st.text_input("Category URL (optional):")
-        submitted = st.form_submit_button("Scrape Products")
+    col1, col2 = st.columns(2)
+    with col1:
+        brand = st.selectbox("Select Brand", ["H&M", "Zara", "MaxFashion", "Splash", "Shein"])
+    with col2:
+        category_url = st.text_input("Paste Category URL (optional)")
 
-        if submitted:
-            with st.spinner("Scraping products..."):
-                candidate_df = scrape_category(brand, category, gender, season, url)
-                st.success(f"{len(candidate_df)} products scraped.")
-                candidate_df = extract_attributes_from_df(candidate_df)
-                st.dataframe(candidate_df.head())
+    category = st.selectbox("Select Category", ["Dresses", "Handbags", "Casual T-Shirts", "Character Tops"])
+    gender = st.selectbox("Gender", ["Women", "Men", "Kids"])
+    season = st.selectbox("Season", ["Spring", "Summer", "Fall", "Winter"])
 
-elif mode == "Upload Candidate Designs":
-    uploaded_files = st.file_uploader("Upload images", accept_multiple_files=True, type=["jpg", "jpeg", "png"])
+    if st.button("Scrape"):
+        with st.spinner("Scraping in progress..."):
+            scraped_df = scrape_category_data(brand, category, gender, season, category_url)
+            st.success(f"Scraped {len(scraped_df)} products.")
+            st.dataframe(scraped_df.head())
+
+        st.session_state["scraped_df"] = scraped_df
+
+with tab2:
+    st.header("Upload Your Candidate Designs")
+    uploaded_files = st.file_uploader("Upload product images (PNG, JPG)", accept_multiple_files=True)
+
     if uploaded_files:
-        with st.spinner("Extracting attributes from images..."):
-            candidate_df = extract_attributes_from_images(uploaded_files)
-            st.success("Attribute extraction complete.")
-            st.dataframe(candidate_df.head())
+        uploaded_paths = []
+        for file in uploaded_files:
+            path = os.path.join("uploads", file.name)
+            with open(path, "wb") as f:
+                f.write(file.read())
+            uploaded_paths.append(path)
 
-# --- BUYABILITY SCORING ---
-if candidate_df is not None and not candidate_df.empty:
-    st.subheader("📊 Buyability Scoring & Recommendations")
+        st.session_state["uploaded_files"] = uploaded_paths
+        st.success(f"Uploaded {len(uploaded_paths)} files.")
 
-    try:
-        past_brand_df = pd.read_csv("data/past_brand_products.csv")
-        market_df = pd.read_csv("data/competitor_products.csv")
+# --- Common Assortment Builder ---
 
-        attr_cols = ['color', 'pattern', 'occasion', 'material', 'design']
-        numerical_cols = ['price']
+if "scraped_df" in st.session_state or "uploaded_files" in st.session_state:
+    st.header("🔍 Extract Attributes + Score Products")
 
-        scored_df = calculate_buyability_score(
-            candidate_df,
-            past_brand_df,
-            market_df,
-            attr_cols,
-            numerical_cols
+    if "scraped_df" in st.session_state:
+        raw_df = st.session_state["scraped_df"]
+    else:
+        # Placeholder for visual-only uploaded images
+        raw_df = pd.DataFrame({"image_path": st.session_state["uploaded_files"]})
+
+    # Step 1: Extract Attributes
+    st.subheader("Step 1 – Attribute Extraction")
+    enriched_df = extract_attributes_from_df(raw_df)
+    st.dataframe(enriched_df.head())
+
+    # Step 2: Buyability Scoring
+    st.subheader("Step 2 – Compute Buyability Score")
+    scored_df = compute_buyability_scores(enriched_df)
+    st.dataframe(scored_df.head())
+
+    # Step 3: Recommendation Filters
+    st.subheader("Step 3 – Buyer Prompt & Refinement")
+
+    prompt = st.text_input("Give Refinement Prompt (e.g., more red, reduce browns)")
+    price_min = st.number_input("Min Price (if available)", min_value=0, value=0)
+    price_max = st.number_input("Max Price (if available)", min_value=0, value=500)
+    top_n = st.slider("How many products to recommend?", 5, 30, 12)
+
+    if st.button("Get Recommendations"):
+        final_reco = refine_recommendations(
+            scored_df,
+            prompt=prompt,
+            top_n=top_n,
+            price_min=price_min,
+            price_max=price_max
         )
 
-        st.success("Scoring complete.")
-        st.dataframe(scored_df[['product_name', 'buyability_score'] + attr_cols + numerical_cols])
+        st.success(f"Here are your top {len(final_reco)} picks:")
 
-        top_n = st.slider("Number of products to recommend", min_value=1, max_value=min(20, len(scored_df)), value=10)
-        top_recos = scored_df.head(top_n)
+        for idx, row in final_reco.iterrows():
+            st.image(row.get("image_url", row.get("image_path", "")), width=200, caption=f"{row.get('title', '')} | Score: {round(row['buyability_score'],2)}")
 
-        st.subheader(f"✅ Top {top_n} Recommended Products")
-        st.dataframe(top_recos)
+        st.dataframe(final_reco)
 
-        st.download_button(
-            label="Download Recommendations",
-            data=top_recos.to_csv(index=False),
-            file_name="recommended_products.csv",
-            mime="text/csv"
-        )
-    except Exception as e:
-        st.error(f"Scoring failed: {e}")
-else:
-    st.info("Provide candidate products via scraping or upload to proceed.")
+# Footer
+st.markdown("---")
+st.caption("Built with 💡 by PickWise · MVP v1.1")
