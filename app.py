@@ -1,74 +1,90 @@
 import streamlit as st
 import pandas as pd
-from scraper import run_scraper
-from attribute_extractor import extract_attributes
-from buyability_score import compute_buyability_scores
-from recommendation import generate_recommendations
-from visualizer import show_visualizations
+import plotly.express as px
+from attribute_extraction import extract_attributes
+from buyability_score import score_buyability
+from PIL import Image
+import requests
+from io import BytesIO
 
-# --- Streamlit UI setup ---
-st.set_page_config(page_title="PickWise", layout="wide")
+st.set_page_config(page_title="PickWise – Smarter Choices. Sharper Assortments.", layout="wide")
+st.title("👗 PickWise – Smarter Choices. Sharper Assortments.")
 
-st.title("🧠 PickWise – Smarter Choices. Sharper Assortments.")
+# Sidebar Controls
+st.sidebar.header("📥 Upload CSVs")
+candidate_file = st.sidebar.file_uploader("Upload candidate designs", type=["csv"])
+brand_file = st.sidebar.file_uploader("Upload brand history", type=["csv"])
+competitor_file = st.sidebar.file_uploader("Upload competitor assortment", type=["csv"])
+top_n = st.sidebar.slider("🎯 Select Top N Recommendations", 1, 20, 12)
 
-tabs = st.tabs(["1. 🔍 Comp Scan", "2. 📥 Upload Designs", "3. 💡 Recommendations", "4. 📊 Visual Analysis"])
+# Prompt input for refining results (UI only)
+st.sidebar.header("🎨 Refinement Prompt")
+user_prompt = st.sidebar.text_area("Give us a direction", placeholder="e.g., more reds, fewer florals, longer lengths...")
 
-# --- Comp Scan Tab ---
-with tabs[0]:
-    st.header("📦 Scrape Competitor Products")
+# Main Execution
+if candidate_file and brand_file and competitor_file:
+    with st.spinner("🔍 Processing..."):
+        candidates_df = pd.read_csv(candidate_file)
+        brand_df = pd.read_csv(brand_file)
+        competitor_df = pd.read_csv(competitor_file)
 
-    brand = st.selectbox("Select Brand", ["Zara", "H&M", "MaxFashion", "Splash", "Shein"])
-    category = st.selectbox("Select Category", ["Dresses", "T-Shirts", "Handbags", "Character Tops"])
-    gender = st.selectbox("Select Gender", ["Women", "Men", "Kids"])
-    season = st.selectbox("Select Season", ["Summer", "Winter", "All"])
-    custom_url = st.text_input("Or paste a category URL (optional):")
+        # Extract attributes
+        st.subheader("🔎 Step 1: Attribute Extraction")
+        enriched_candidates = extract_attributes(candidates_df)
+        st.success("✅ Attributes extracted")
 
-    if st.button("Run Scraper"):
-        scraped_data = run_scraper(brand, category, gender, season, custom_url)
-        if scraped_data:
-            st.success(f"Scraped {len(scraped_data)} products from {brand}")
-            df_scraped = pd.DataFrame(scraped_data)
-            st.session_state["scraped_df"] = df_scraped
-            st.dataframe(df_scraped.head())
-        else:
-            st.warning("No products found or failed to scrape.")
+        # Score buyability
+        st.subheader("📊 Step 2: Buyability Scoring")
+        scored_df = score_buyability(enriched_candidates, brand_df, competitor_df)
+        top_df = scored_df.sort_values(by="buyability_score", ascending=False).head(top_n)
+        st.success("✅ Scored and ranked")
 
-# --- Upload Designs Tab ---
-with tabs[1]:
-    st.header("🖼️ Upload Your Design Images")
-    uploaded_files = st.file_uploader("Upload up to 20 design images", type=["jpg", "png"], accept_multiple_files=True)
+        # Show Top N with Images
+        st.subheader(f"🏆 Top {top_n} Recommendations")
+        for _, row in top_df.iterrows():
+            cols = st.columns([1, 2])
+            try:
+                response = requests.get(row['image_url'])
+                img = Image.open(BytesIO(response.content))
+                cols[0].image(img, width=150)
+            except:
+                cols[0].warning("No Image")
+            with cols[1]:
+                st.markdown(f"**{row['product_name']}**")
+                st.markdown(f"Score: `{row['buyability_score']:.2f}`")
+                st.markdown(f"• Brand Newness: `{row['score_brand']:.2f}`")
+                st.markdown(f"• Market Newness: `{row['score_market']:.2f}`")
+                st.markdown(f"• Variety: `{row['score_variety']:.2f}`")
+                st.markdown(f"• Completeness: `{row['score_completeness']:.2f}`")
 
-    if uploaded_files:
-        extracted = extract_attributes(uploaded_files)
-        st.session_state["uploaded_df"] = pd.DataFrame(extracted)
-        st.success("Attributes extracted for uploaded images.")
-        st.dataframe(st.session_state["uploaded_df"])
-
-# --- Recommendations Tab ---
-with tabs[2]:
-    st.header("🎯 Get Buyability Recommendations")
-
-    if "scraped_df" in st.session_state and "uploaded_df" in st.session_state:
-        scored_df = compute_buyability_scores(
-            candidate_df=st.session_state["uploaded_df"],
-            brand_history_df=st.session_state["scraped_df"],
-            market_df=st.session_state["scraped_df"]
+        # Score Breakdown Visualization
+        st.subheader("📈 Score Breakdown – Stacked View")
+        breakdown = top_df[['product_name', 'score_brand', 'score_market', 'score_variety', 'score_completeness']].melt(
+            id_vars='product_name', var_name='Score Type', value_name='Score'
         )
-        st.session_state["scored_df"] = scored_df
+        fig = px.bar(
+            breakdown,
+            x="product_name",
+            y="Score",
+            color="Score Type",
+            title="Buyability Score Components",
+            barmode="stack"
+        )
+        st.plotly_chart(fig, use_container_width=True)
 
-        num_recommend = st.slider("How many to recommend?", 5, 20, 12)
-        prompt = st.text_input("Prompt to guide refinement (e.g., 'more red long dresses, fewer browns')")
+        # Attribute Heatmap
+        st.subheader("🧪 Attribute Variety Heatmap")
+        attribute_cols = [col for col in enriched_candidates.columns if col.startswith('attr_')]
+        attr_counts = enriched_candidates[attribute_cols].apply(pd.Series.value_counts).fillna(0).astype(int)
+        fig2 = px.imshow(attr_counts, labels=dict(x="Attribute Value", y="Attribute Type", color="Frequency"),
+                         title="Attribute Distribution Across Candidate Set")
+        st.plotly_chart(fig2, use_container_width=True)
 
-        recos = generate_recommendations(scored_df, num_recommend, prompt)
-        st.dataframe(recos)
-    else:
-        st.info("Please complete scraping and upload designs first.")
+        # Download CSV
+        st.download_button("📥 Download Top N CSV", top_df.to_csv(index=False), file_name="top_recommendations.csv")
 
-# --- Visualizations Tab ---
-with tabs[3]:
-    st.header("📈 Visual Comparison")
+else:
+    st.info("Please upload all three datasets (candidate, brand, competitor) to get started.")
 
-    if "scraped_df" in st.session_state:
-        show_visualizations(st.session_state["scraped_df"])
-    else:
-        st.info("Scrape competitor products to see visual insights.")
+st.markdown("---")
+st.caption("Built with ❤️ by PickWise · v1 MVP")
