@@ -3,7 +3,7 @@ import pandas as pd
 from attribute_extractor import enrich_attributes_from_images as enrich_and_export_attributes
 from scraper import scrape_all_sources
 from buyability_score import compute_buyability_scores, recommend_top_n
-from visualization import visualize_buyability_breakdown, visualize_candidate_vs_market, visualize_brand_vs_brand
+from visualizer import visualize_buyability_breakdown, visualize_candidate_vs_market, visualize_brand_vs_brand
 from utils import load_uploaded_images
 
 st.set_page_config(page_title="PickWise – Smarter Choices. Sharper Assortments.", layout="wide")
