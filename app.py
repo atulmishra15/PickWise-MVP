@@ -40,7 +40,7 @@ with col1:
     if scrape_trigger and category_urls:
         with st.spinner("Scraping brand data..."):
             brand_inputs = [(detect_brand_from_url(url), url) for url in category_urls]
-            brand_data = scrape_all_sources(gender, season, brand_inputs)
+            brand_data = scrape_all_sources(category_urls)
             if not brand_data:
                 st.warning("No data scraped. Please check the category URLs and try again.")
             else:
