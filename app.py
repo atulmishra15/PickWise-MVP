@@ -1,94 +1,74 @@
 import streamlit as st
 import pandas as pd
-import tempfile
-from PIL import Image
-import os
-
-from scraper import run_scraper  # category, gender, season, brand_urls
+from scraper import run_scraper
 from attribute_extractor import extract_attributes
 from buyability_score import compute_buyability_scores
-from recommendation import get_recommendations
-from visualizer import (
-    plot_attribute_distribution,
-    compare_uploaded_vs_scraped,
-    show_buyability_distribution,
-    show_price_vs_score
-)
+from recommendation import generate_recommendations
+from visualizer import show_visualizations
 
-st.set_page_config(page_title="PickWise – Smarter Choices. Sharper Assortments.", layout="wide")
+# --- Streamlit UI setup ---
+st.set_page_config(page_title="PickWise", layout="wide")
 
-st.title("👗 PickWise – Smarter Choices. Sharper Assortments.")
+st.title("🧠 PickWise – Smarter Choices. Sharper Assortments.")
 
-# --- Step 1: Category & Brand Inputs ---
-st.sidebar.header("1. Competitor Scan Input")
-category = st.sidebar.selectbox("Select Category", ["Women Dresses", "Handbags", "Men Casual T-Shirts", "Kids Character Tops"])
-gender = st.sidebar.selectbox("Gender", ["Women", "Men", "Kids"])
-season = st.sidebar.selectbox("Season", ["Spring/Summer", "Autumn/Winter"])
-brand_urls = {}
+tabs = st.tabs(["1. 🔍 Comp Scan", "2. 📥 Upload Designs", "3. 💡 Recommendations", "4. 📊 Visual Analysis"])
 
-st.sidebar.markdown("### Add Competitor URLs (optional)")
-for brand in ["H&M", "Zara", "MaxFashion", "Splash", "Shein"]:
-    brand_urls[brand] = st.sidebar.text_input(f"{brand} URL")
+# --- Comp Scan Tab ---
+with tabs[0]:
+    st.header("📦 Scrape Competitor Products")
 
-if st.sidebar.button("Run Scraper"):
-    scraped_df = run_scraper(category, gender, season, brand_urls)
-    st.session_state["scraped_df"] = scraped_df
-    st.success(f"Scraped {len(scraped_df)} products across 5 brands.")
-    st.dataframe(scraped_df.head())
+    brand = st.selectbox("Select Brand", ["Zara", "H&M", "MaxFashion", "Splash", "Shein"])
+    category = st.selectbox("Select Category", ["Dresses", "T-Shirts", "Handbags", "Character Tops"])
+    gender = st.selectbox("Select Gender", ["Women", "Men", "Kids"])
+    season = st.selectbox("Select Season", ["Summer", "Winter", "All"])
+    custom_url = st.text_input("Or paste a category URL (optional):")
 
-# --- Step 2: Upload Candidate Designs ---
-st.header("📤 Upload Candidate Product Designs")
-uploaded_files = st.file_uploader("Upload product images", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
-uploaded_data = []
+    if st.button("Run Scraper"):
+        scraped_data = run_scraper(brand, category, gender, season, custom_url)
+        if scraped_data:
+            st.success(f"Scraped {len(scraped_data)} products from {brand}")
+            df_scraped = pd.DataFrame(scraped_data)
+            st.session_state["scraped_df"] = df_scraped
+            st.dataframe(df_scraped.head())
+        else:
+            st.warning("No products found or failed to scrape.")
 
-if uploaded_files:
-    st.image([Image.open(f) for f in uploaded_files], width=100)
-    for file in uploaded_files:
-        with tempfile.NamedTemporaryFile(delete=False) as tmp:
-            tmp.write(file.read())
-            uploaded_data.append(tmp.name)
+# --- Upload Designs Tab ---
+with tabs[1]:
+    st.header("🖼️ Upload Your Design Images")
+    uploaded_files = st.file_uploader("Upload up to 20 design images", type=["jpg", "png"], accept_multiple_files=True)
 
-# --- Step 3: Extract Attributes ---
-if st.button("🔍 Extract Attributes"):
-    attr_df = extract_attributes(scraped=st.session_state.get("scraped_df", None), uploaded_images=uploaded_data)
-    st.session_state["attr_df"] = attr_df
-    st.dataframe(attr_df.head())
-    st.success("Attributes extracted!")
+    if uploaded_files:
+        extracted = extract_attributes(uploaded_files)
+        st.session_state["uploaded_df"] = pd.DataFrame(extracted)
+        st.success("Attributes extracted for uploaded images.")
+        st.dataframe(st.session_state["uploaded_df"])
 
-# --- Step 4: Score for Buyability ---
-if "attr_df" in st.session_state:
-    st.header("📊 Buyability Scoring")
-    scored_df = compute_buyability_scores(st.session_state["attr_df"])
-    st.session_state["scored_df"] = scored_df
-    st.dataframe(scored_df[["image", "brand", "buyability_score"] + [col for col in scored_df.columns if col.startswith("attr_")]].head())
+# --- Recommendations Tab ---
+with tabs[2]:
+    st.header("🎯 Get Buyability Recommendations")
 
-# --- Step 5: Recommendations ---
-if "scored_df" in st.session_state:
-    st.header("🎯 Recommendations")
-    budget = st.slider("Set max budget per item (AED)", min_value=30, max_value=500, value=250)
-    quantity = st.slider("How many items to recommend?", min_value=5, max_value=30, value=12)
+    if "scraped_df" in st.session_state and "uploaded_df" in st.session_state:
+        scored_df = compute_buyability_scores(
+            candidate_df=st.session_state["uploaded_df"],
+            brand_history_df=st.session_state["scraped_df"],
+            market_df=st.session_state["scraped_df"]
+        )
+        st.session_state["scored_df"] = scored_df
 
-    reco_df = get_recommendations(st.session_state["scored_df"], budget=budget, n=quantity)
-    st.dataframe(reco_df)
-    st.session_state["reco_df"] = reco_df
+        num_recommend = st.slider("How many to recommend?", 5, 20, 12)
+        prompt = st.text_input("Prompt to guide refinement (e.g., 'more red long dresses, fewer browns')")
 
-# --- Step 6: Visualization & Analysis ---
-if "scored_df" in st.session_state:
-    st.header("📈 Assortment Visualization")
-    scored_df = st.session_state["scored_df"]
+        recos = generate_recommendations(scored_df, num_recommend, prompt)
+        st.dataframe(recos)
+    else:
+        st.info("Please complete scraping and upload designs first.")
 
-    plot_attribute_distribution(scored_df, "color", "Color Spread")
-    plot_attribute_distribution(scored_df, "occasion", "Occasion Mix")
-    show_buyability_distribution(scored_df)
-    show_price_vs_score(scored_df)
+# --- Visualizations Tab ---
+with tabs[3]:
+    st.header("📈 Visual Comparison")
 
     if "scraped_df" in st.session_state:
-        compare_uploaded_vs_scraped(
-            pd.DataFrame(scored_df),
-            st.session_state["scraped_df"],
-            attribute="color"
-        )
-
-# --- Footer ---
-st.markdown("---")
-st.markdown("© 2025 PickWise – Built for smarter, sharper retail.")
+        show_visualizations(st.session_state["scraped_df"])
+    else:
+        st.info("Scrape competitor products to see visual insights.")
