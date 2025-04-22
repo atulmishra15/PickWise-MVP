@@ -45,3 +45,33 @@ def detect_attributes_from_filename(name):
     specific = category_specific.get(detected_category, {})
     for key, options in specific.items():
         base_attributes[key] = random.choice(options)
+
+    return base_attributes
+
+def enrich_attributes_from_images(images_or_df):
+    enriched_data = []
+    if isinstance(images_or_df, list):
+        for image_file in images_or_df:
+            try:
+                image_name = image_file.name
+                attrs = detect_attributes_from_filename(image_name)
+                attrs["source"] = "candidate"
+                attrs["image_name"] = image_name
+                enriched_data.append(attrs)
+            except Exception as e:
+                print(f"Error processing {image_file.name}: {e}")
+    elif isinstance(images_or_df, pd.DataFrame):
+        for _, row in images_or_df.iterrows():
+            name = row.get("image_name") or row.get("name") or f"product_{datetime.now().timestamp()}"
+            attrs = detect_attributes_from_filename(name)
+            attrs.update(row.to_dict())
+            enriched_data.append(attrs)
+
+    return pd.DataFrame(enriched_data)
+
+def enrich_and_export_attributes(images_or_df, export_path=None):
+    df = enrich_attributes_from_images(images_or_df)
+    if export_path:
+        os.makedirs(os.path.dirname(export_path), exist_ok=True)
+        df.to_csv(export_path, index=False)
+    return df
