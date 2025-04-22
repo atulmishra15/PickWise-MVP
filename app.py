@@ -1,44 +1,76 @@
-# app.py
 import streamlit as st
-from scraper import scrape_category
-from utils import extract_attributes, calculate_buyability_scores, recommend_products
-import pandas as pd
-from PIL import Image
 import os
+import json
+import uuid
+from scraper import run_scraper
+from attribute_extractor import extract_attributes
+from scoring import score_and_recommend
+
+# Directories
+UPLOAD_DIR = "uploads"
+if not os.path.exists(UPLOAD_DIR):
+    os.makedirs(UPLOAD_DIR)
 
 st.set_page_config(page_title="PickWise – Smarter Choices. Sharper Assortments.", layout="wide")
-st.title("🧠 PickWise – Smarter Choices. Sharper Assortments.")
+st.title("🛍️ PickWise – Smarter Choices. Sharper Assortments.")
+st.markdown("Upload your product concepts or scan competitors to get AI-powered buy recommendations.")
 
-st.sidebar.header("👗 Competitive Scan Inputs")
-brand = st.sidebar.selectbox("Select Brand", ["H&M", "Zara", "MaxFashion", "Splash", "Shein"])
-category = st.sidebar.selectbox("Select Category", ["Dresses", "Handbags", "T-Shirts", "Character Tops"])
-gender = st.sidebar.selectbox("Select Gender", ["Women", "Men", "Kids"])
-season = st.sidebar.selectbox("Select Season", ["All Year", "Spring/Summer", "Autumn/Winter"])
-category_url = st.sidebar.text_input("Paste Category URL (Optional)")
+# --- Buyer Input Area ---
+st.sidebar.header("1️⃣ Select Source")
+input_type = st.sidebar.radio("How would you like to proceed?", ["Upload Designs", "Scrape Competitors"])
 
-if st.sidebar.button("Scrape Now"):
-    st.session_state["scraped_data"] = scrape_category(brand, category, gender, season, category_url)
-    st.success("Scraping Complete! Proceed to Attribute Extraction")
+if input_type == "Upload Designs":
+    uploaded_files = st.sidebar.file_uploader("Upload product images (JPG/PNG)", type=["jpg", "png"], accept_multiple_files=True)
+    num_to_recommend = st.sidebar.slider("How many options to recommend?", 5, 20, 12)
 
-st.header("📥 Upload Your Candidate Designs")
-candidate_files = st.file_uploader("Upload candidate images", type=["jpg", "png"], accept_multiple_files=True)
+    uploaded_products = []
+    for file in uploaded_files:
+        file_path = os.path.join(UPLOAD_DIR, f"{uuid.uuid4()}_{file.name}")
+        with open(file_path, "wb") as f:
+            f.write(file.read())
+        uploaded_products.append({
+            "title": file.name.replace(".jpg", "").replace(".png", ""),
+            "description": "",
+            "image_path": file_path
+        })
 
-if candidate_files:
-    st.image([Image.open(f) for f in candidate_files], width=100, caption=[f.name for f in candidate_files])
-    extracted = extract_attributes(candidate_files)
-    st.session_state["candidate_attrs"] = extracted
-    st.success("Attributes Extracted")
+    if uploaded_products:
+        st.subheader("🖼️ Uploaded Designs")
+        st.image([p["image_path"] for p in uploaded_products], width=150)
+        if st.button("🔍 Analyze Uploaded Designs"):
+            enriched = extract_attributes(uploaded_products)
+            scored, reco = score_and_recommend(enriched, num_to_recommend)
+            st.success("Buyability Scores & Recommendations")
+            st.dataframe(scored)
+            st.subheader("📌 Recommended to Buy")
+            st.dataframe(reco)
 
-if "scraped_data" in st.session_state and "candidate_attrs" in st.session_state:
-    st.header("🧮 Scoring & Recommendations")
-    scraped_df = st.session_state["scraped_data"]
-    candidate_df = st.session_state["candidate_attrs"]
+elif input_type == "Scrape Competitors":
+    brand = st.sidebar.selectbox("Select Brand", ["H&M", "Zara", "Max", "Splash", "Shein"])
+    gender = st.sidebar.selectbox("Gender", ["Women", "Men", "Girls", "Boys"])
+    season = st.sidebar.selectbox("Season", ["SS24", "AW23", "Transitional"])
+    category_url = st.sidebar.text_input("Or paste category URL (optional)", "")
 
-    scored_df = calculate_buyability_scores(candidate_df, scraped_df)
-    st.write("Buyability Scores:", scored_df)
+    st.sidebar.write("We will scrape top 150 products for this selection.")
+    if st.sidebar.button("⚙️ Start Scraping"):
+        with st.spinner("Scraping competitor products..."):
+            scraped = run_scraper(brand=brand, gender=gender, season=season, category_url=category_url)
+            enriched = extract_attributes(scraped)
+            scored, reco = score_and_recommend(enriched, 20)
+            st.success(f"Scraped and analyzed {len(enriched)} products from {brand}")
+            st.dataframe(scored)
+            st.subheader("📌 Recommended Options")
+            st.dataframe(reco)
 
-    n_to_buy = st.slider("Number of options to recommend", 5, min(20, len(scored_df)), 10)
-    recommended_df = recommend_products(scored_df, n_to_buy)
-    st.write("Recommended Selection:", recommended_df)
+# --- Prompt Refinement (Optional) ---
+st.sidebar.header("2️⃣ Refine Recommendations")
+prompt_input = st.sidebar.text_input("Example: More red long dresses, fewer black bodycons")
+if prompt_input:
+    st.info(f"Prompt-based refinement logic to be enabled soon: '{prompt_input}'")
 
-    st.download_button("Download Recommendation CSV", data=recommended_df.to_csv(), file_name="pickwise_recommendations.csv")
+# --- Save/Export Options ---
+if st.button("💾 Export Results"):
+    st.download_button("Download JSON", data=json.dumps(reco, indent=2), file_name="recommendations.json")
+
+st.markdown("---")
+st.caption("Built with 💡 by your Product AI assistant.")
