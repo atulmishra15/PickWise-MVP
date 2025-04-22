@@ -1,62 +1,78 @@
+import streamlit as st
 import matplotlib.pyplot as plt
 import seaborn as sns
-import streamlit as st
 import pandas as pd
+from PIL import Image
+import io
 
-def show_image_grid(df, title_col='Title', image_col='Image URL'):
-    st.markdown("#### Preview of Recommended Options")
-    for i in range(0, len(df), 4):
-        cols = st.columns(4)
-        for j in range(4):
-            if i + j < len(df):
-                with cols[j]:
-                    st.image(df.iloc[i + j][image_col], caption=df.iloc[i + j][title_col], use_column_width=True)
+def show_image_grid(df, image_col="image", title_col="title"):
+    st.markdown("#### Image Grid")
+    cols = st.columns(4)
+    for idx, row in df.iterrows():
+        with cols[idx % 4]:
+            try:
+                if isinstance(row[image_col], str):
+                    img = Image.open(row[image_col])
+                elif isinstance(row[image_col], (io.BytesIO, bytes)):
+                    img = Image.open(io.BytesIO(row[image_col]))
+                else:
+                    img = row[image_col]
+                st.image(img, caption=row.get(title_col, ""), use_column_width=True)
+            except Exception as e:
+                st.write("Image not available")
 
 def plot_score_breakdown(df):
-    st.markdown("#### Score Breakdown")
-    breakdown_cols = ['Market Newness Score', 'Brand Newness Score', 'Variety Score', 'Completeness Score']
-    fig, ax = plt.subplots(figsize=(10, 5))
-    df[breakdown_cols].plot(kind='bar', stacked=True, ax=ax)
-    ax.set_title("Buyability Score Breakdown by Option")
-    ax.set_xlabel("Option Index")
-    ax.set_ylabel("Score Contribution")
+    st.markdown("#### Buyability Score Breakdown")
+    if 'Buyability Score' not in df.columns:
+        st.warning("No score breakdown available.")
+        return
+
+    fig, ax = plt.subplots(figsize=(12, 6))
+    score_columns = [col for col in df.columns if 'score' in col.lower() and col != 'Buyability Score']
+    df_melt = df.melt(id_vars=["title"], value_vars=score_columns, var_name="Criteria", value_name="Score Component")
+    sns.barplot(data=df_melt, x="title", y="Score Component", hue="Criteria", ax=ax)
+    ax.set_title("Score Component Breakdown by Product")
+    ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha='right')
     st.pyplot(fig)
 
 def visualize_heatmap(df):
-    st.markdown("#### Buyability Heatmap")
-    score_matrix = df[['Market Newness Score', 'Brand Newness Score', 'Variety Score', 'Completeness Score']]
-    plt.figure(figsize=(10, 6))
-    sns.heatmap(score_matrix, annot=True, cmap="YlGnBu", fmt=".2f")
-    st.pyplot(plt.gcf())
+    st.markdown("#### Attribute Heatmap")
+    if df.empty:
+        st.warning("No data to display.")
+        return
+
+    numeric_cols = df.select_dtypes(include=["float", "int"]).columns.tolist()
+    if not numeric_cols:
+        st.warning("No numeric attributes for heatmap.")
+        return
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    sns.heatmap(df[numeric_cols].corr(), annot=True, cmap="coolwarm", ax=ax)
+    ax.set_title("Correlation Heatmap of Attributes")
+    st.pyplot(fig)
 
 def plot_attribute_distribution(df):
     st.markdown("#### Attribute Distribution")
-    for attr in ['Color', 'Length', 'Style', 'Material', 'Occasion']:
+    attr_cols = ['color', 'length', 'material', 'print', 'occasion', 'style']
+    for attr in attr_cols:
         if attr in df.columns:
             fig, ax = plt.subplots()
-            df[attr].value_counts().plot(kind='bar', ax=ax, title=f"{attr} Distribution")
+            df[attr].value_counts().plot(kind='bar', ax=ax)
+            ax.set_title(f"Distribution of {attr.capitalize()}")
             st.pyplot(fig)
 
-def plot_market_comparison(df1, df2):
-    st.markdown("#### Market Comparison: Brand vs Brand")
-    common_attrs = ['Color', 'Length', 'Style', 'Material', 'Occasion']
+def plot_market_comparison(candidates_df, competitors_df):
+    st.markdown("#### Market Positioning: Candidates vs Competitors")
+    common_attrs = ['color', 'length', 'style']
     for attr in common_attrs:
-        if attr in df1.columns and attr in df2.columns:
+        if attr in candidates_df.columns and attr in competitors_df.columns:
             fig, ax = plt.subplots()
-            df1[attr].value_counts(normalize=True).plot(kind='bar', alpha=0.6, label='Brand A', ax=ax)
-            df2[attr].value_counts(normalize=True).plot(kind='bar', alpha=0.6, label='Brand B', ax=ax, color='orange')
-            ax.set_title(f"{attr} Comparison")
-            ax.legend()
-            st.pyplot(fig)
-
-def plot_candidate_vs_brands_comparison(candidates, brands):
-    st.markdown("#### Comparison: Candidates vs Competitor Brands")
-    attributes = ['Color', 'Length', 'Style', 'Material', 'Occasion']
-    for attr in attributes:
-        if attr in candidates.columns and attr in brands.columns:
-            fig, ax = plt.subplots()
-            candidates[attr].value_counts(normalize=True).plot(kind='bar', label='Candidates', ax=ax)
-            brands[attr].value_counts(normalize=True).plot(kind='bar', alpha=0.6, label='Market', ax=ax, color='green')
-            ax.set_title(f"{attr} - Candidates vs Market")
-            ax.legend()
+            cand_counts = candidates_df[attr].value_counts()
+            comp_counts = competitors_df[attr].value_counts()
+            combined = pd.DataFrame({
+                "Candidates": cand_counts,
+                "Competitors": comp_counts
+            }).fillna(0)
+            combined.plot(kind="bar", ax=ax)
+            ax.set_title(f"{attr.capitalize()} Comparison")
             st.pyplot(fig)
