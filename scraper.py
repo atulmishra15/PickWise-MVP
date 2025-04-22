@@ -1,164 +1,148 @@
 import requests
 from bs4 import BeautifulSoup
-from typing import List, Dict, Optional
-import random
-import time
+import pandas as pd
+from typing import List
 
-# --- Individual brand scrapers ---
-
-def scrape_zara(category_url: str) -> List[Dict]:
-    # Placeholder implementation — replace with actual Zara logic
+def scrape_hm(category_url: str, category: str, gender: str, season: str) -> pd.DataFrame:
+    response = requests.get(category_url)
+    soup = BeautifulSoup(response.text, 'html.parser')
     products = []
-    try:
-        response = requests.get(category_url)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        items = soup.find_all("article")[:150]
-        for item in items:
-            name = item.get("data-name") or "Zara Item"
-            price = item.get("data-price") or random.uniform(50, 300)
-            image_url = item.find("img")["src"] if item.find("img") else ""
-            products.append({
-                "name": name,
-                "price": float(price),
-                "brand": "Zara",
-                "image_url": image_url,
-                "attributes": {}
-            })
-    except Exception as e:
-        print(f"Error scraping Zara: {e}")
-    return products
+    for item in soup.select('[data-articlecode]')[:150]:
+        name = item.get('data-name', 'Unknown')
+        price = item.get('data-price')
+        image_tag = item.select_one('img')
+        image_url = image_tag['src'] if image_tag else ''
+        link_tag = item.find_parent('a')
+        product_url = link_tag['href'] if link_tag else category_url
+        products.append({
+            'brand': 'H&M',
+            'category': category,
+            'gender': gender,
+            'season': season,
+            'product_name': name,
+            'price': float(price) if price else 0.0,
+            'image_url': image_url,
+            'product_url': product_url
+        })
+    return pd.DataFrame(products)
 
-
-def scrape_hnm(category_url: str) -> List[Dict]:
+def scrape_zara(category_url: str, category: str, gender: str, season: str) -> pd.DataFrame:
+    response = requests.get(category_url)
+    soup = BeautifulSoup(response.text, 'html.parser')
     products = []
-    try:
-        response = requests.get(category_url)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        items = soup.find_all("article")[:150]
-        for item in items:
-            name = item.get("data-name") or "H&M Item"
-            price = item.get("data-price") or random.uniform(30, 250)
-            image_url = item.find("img")["src"] if item.find("img") else ""
-            products.append({
-                "name": name,
-                "price": float(price),
-                "brand": "H&M",
-                "image_url": image_url,
-                "attributes": {}
-            })
-    except Exception as e:
-        print(f"Error scraping H&M: {e}")
-    return products
+    for item in soup.select('div.product-grid-product')[:150]:
+        name_tag = item.select_one('a.name')
+        name = name_tag.text.strip() if name_tag else 'Unknown'
+        price_tag = item.select_one('span.price')
+        price = price_tag.text.replace('AED', '').strip() if price_tag else '0'
+        image_tag = item.select_one('img')
+        image_url = image_tag['src'] if image_tag else ''
+        link_tag = item.select_one('a')
+        product_url = 'https://www.zara.com' + link_tag['href'] if link_tag else category_url
+        products.append({
+            'brand': 'Zara',
+            'category': category,
+            'gender': gender,
+            'season': season,
+            'product_name': name,
+            'price': float(price),
+            'image_url': image_url,
+            'product_url': product_url
+        })
+    return pd.DataFrame(products)
 
-
-def scrape_maxfashion(category_url: str) -> List[Dict]:
+def scrape_maxfashion(category_url: str, category: str, gender: str, season: str) -> pd.DataFrame:
+    response = requests.get(category_url)
+    soup = BeautifulSoup(response.text, 'html.parser')
     products = []
-    try:
-        response = requests.get(category_url)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        items = soup.find_all("div", class_="product-tile")[:150]
-        for item in items:
-            name = item.get("data-name") or "Max Item"
-            price = item.get("data-price") or random.uniform(20, 200)
-            image_url = item.find("img")["src"] if item.find("img") else ""
-            products.append({
-                "name": name,
-                "price": float(price),
-                "brand": "MaxFashion",
-                "image_url": image_url,
-                "attributes": {}
-            })
-    except Exception as e:
-        print(f"Error scraping MaxFashion: {e}")
-    return products
+    for item in soup.select('div.product-tile')[:150]:
+        name_tag = item.select_one('.pdp-link')
+        name = name_tag.text.strip() if name_tag else 'Unknown'
+        price_tag = item.select_one('.product-sales-price')
+        price = price_tag.text.replace('AED', '').strip() if price_tag else '0'
+        image_tag = item.select_one('img')
+        image_url = image_tag['src'] if image_tag else ''
+        link_tag = item.select_one('a')
+        product_url = 'https://www.maxfashion.com' + link_tag['href'] if link_tag else category_url
+        products.append({
+            'brand': 'MaxFashion',
+            'category': category,
+            'gender': gender,
+            'season': season,
+            'product_name': name,
+            'price': float(price),
+            'image_url': image_url,
+            'product_url': product_url
+        })
+    return pd.DataFrame(products)
 
-
-def scrape_splash(category_url: str) -> List[Dict]:
+def scrape_splash(category_url: str, category: str, gender: str, season: str) -> pd.DataFrame:
+    response = requests.get(category_url)
+    soup = BeautifulSoup(response.text, 'html.parser')
     products = []
-    try:
-        response = requests.get(category_url)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        items = soup.find_all("div", class_="product")[:150]
-        for item in items:
-            name = item.get("data-name") or "Splash Item"
-            price = item.get("data-price") or random.uniform(25, 180)
-            image_url = item.find("img")["src"] if item.find("img") else ""
-            products.append({
-                "name": name,
-                "price": float(price),
-                "brand": "Splash",
-                "image_url": image_url,
-                "attributes": {}
-            })
-    except Exception as e:
-        print(f"Error scraping Splash: {e}")
-    return products
+    for item in soup.select('div.product-tile')[:150]:
+        name_tag = item.select_one('.pdp-link')
+        name = name_tag.text.strip() if name_tag else 'Unknown'
+        price_tag = item.select_one('.product-sales-price')
+        price = price_tag.text.replace('AED', '').strip() if price_tag else '0'
+        image_tag = item.select_one('img')
+        image_url = image_tag['src'] if image_tag else ''
+        link_tag = item.select_one('a')
+        product_url = 'https://www.splashfashions.com' + link_tag['href'] if link_tag else category_url
+        products.append({
+            'brand': 'Splash',
+            'category': category,
+            'gender': gender,
+            'season': season,
+            'product_name': name,
+            'price': float(price),
+            'image_url': image_url,
+            'product_url': product_url
+        })
+    return pd.DataFrame(products)
 
-
-def scrape_shein(category_url: str) -> List[Dict]:
+def scrape_shein(category_url: str, category: str, gender: str, season: str) -> pd.DataFrame:
+    response = requests.get(category_url, headers={'User-Agent': 'Mozilla/5.0'})
+    soup = BeautifulSoup(response.text, 'html.parser')
     products = []
-    try:
-        response = requests.get(category_url)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        items = soup.find_all("section", class_="S-product-item__container")[:150]
-        for item in items:
-            name = item.get("data-name") or "Shein Item"
-            price = item.get("data-price") or random.uniform(15, 150)
-            image_url = item.find("img")["src"] if item.find("img") else ""
-            products.append({
-                "name": name,
-                "price": float(price),
-                "brand": "Shein",
-                "image_url": image_url,
-                "attributes": {}
-            })
-    except Exception as e:
-        print(f"Error scraping Shein: {e}")
-    return products
+    for item in soup.select('div.SheinProductCard')[:150]:
+        name_tag = item.select_one('p.name')
+        name = name_tag.text.strip() if name_tag else 'Unknown'
+        price_tag = item.select_one('span.price')
+        price = price_tag.text.replace('AED', '').strip() if price_tag else '0'
+        image_tag = item.select_one('img')
+        image_url = image_tag['src'] if image_tag else ''
+        link_tag = item.select_one('a')
+        product_url = 'https://www.shein.com' + link_tag['href'] if link_tag else category_url
+        products.append({
+            'brand': 'Shein',
+            'category': category,
+            'gender': gender,
+            'season': season,
+            'product_name': name,
+            'price': float(price),
+            'image_url': image_url,
+            'product_url': product_url
+        })
+    return pd.DataFrame(products)
 
+def run_scraper(selected_brands: List[str], category_urls: dict, category: str, gender: str, season: str) -> pd.DataFrame:
+    all_data = []
+    for brand in selected_brands:
+        url = category_urls.get(brand, '')
+        if not url:
+            continue
+        if brand == 'H&M':
+            all_data.append(scrape_hm(url, category, gender, season))
+        elif brand == 'Zara':
+            all_data.append(scrape_zara(url, category, gender, season))
+        elif brand == 'MaxFashion':
+            all_data.append(scrape_maxfashion(url, category, gender, season))
+        elif brand == 'Splash':
+            all_data.append(scrape_splash(url, category, gender, season))
+        elif brand == 'Shein':
+            all_data.append(scrape_shein(url, category, gender, season))
 
-# --- Main controller function ---
-
-def run_scraper(brand_name: str, category_name: str, gender: str, season: str, category_url: Optional[str] = None) -> List[Dict]:
-    print(f"Running scraper for {brand_name} | Category: {category_name} | Gender: {gender} | Season: {season}")
-
-    # If buyer hasn't provided a URL, you could fallback to preset mappings
-    if not category_url:
-        category_url = get_fallback_url(brand_name, category_name, gender, season)
-
-    if not category_url:
-        print("No URL provided or found.")
-        return []
-
-    scraper_map = {
-        "Zara": scrape_zara,
-        "H&M": scrape_hnm,
-        "MaxFashion": scrape_maxfashion,
-        "Splash": scrape_splash,
-        "Shein": scrape_shein,
-    }
-
-    scraper_function = scraper_map.get(brand_name)
-    if not scraper_function:
-        print(f"No scraper implemented for {brand_name}")
-        return []
-
-    return scraper_function(category_url)
-
-
-# --- URL fallback logic ---
-
-def get_fallback_url(brand: str, category: str, gender: str, season: str) -> Optional[str]:
-    # You can populate this mapping from a config file or database later
-    sample_map = {
-        ("Zara", "Dresses", "Women"): "https://www.zara.com/ae/en/woman-dresses-l1066.html",
-        ("H&M", "T-Shirts", "Men"): "https://www2.hm.com/en_gb/men/products/t-shirts.html",
-        # Add more mappings here...
-    }
-    return sample_map.get((brand, category, gender))
-
-
-# --- For quick testing ---
-if __name__ == "__main__":
-    result = run_scraper("Zara", "Dresses", "Women", "Summer")
-    print(result[:2])  # Preview first two products
+    combined_df = pd.concat(all_data, ignore_index=True)
+    combined_df.to_csv("scraped_data.csv", index=False)
+    return combined_df
