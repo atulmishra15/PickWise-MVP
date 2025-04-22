@@ -6,7 +6,7 @@ from scraper import scrape_products
 from buyability_score import compute_buyability_scores, recommend_top_n
 
 st.set_page_config(page_title="PickWise", layout="wide")
-st.image("pickwise_logo.png", width=180)
+st.image("pickwise-logo.png", width=180)
 st.title("👗 PickWise – Smarter Choices. Sharper Assortments.")
 st.markdown("Upload your candidate designs or scrape top 150 products per brand/category to begin scoring and recommendations.")
 
