@@ -1,59 +1,82 @@
-# buyability_score.py
-
+import pandas as pd
 import numpy as np
+from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_distances
-from sklearn.preprocessing import OneHotEncoder, MinMaxScaler
+import streamlit as st
 
-def preprocess_features(df, categorical_cols, numerical_cols):
-    enc = OneHotEncoder(sparse=False, handle_unknown='ignore')
-    scaled = MinMaxScaler()
+def tfidf_cosine_distance(base_set: pd.Series, candidates: pd.Series) -> np.ndarray:
+    vectorizer = TfidfVectorizer()
+    all_texts = pd.concat([base_set, candidates], ignore_index=True).fillna('')
+    tfidf_matrix = vectorizer.fit_transform(all_texts)
+    base_vecs = tfidf_matrix[:len(base_set)]
+    cand_vecs = tfidf_matrix[len(base_set):]
+    distances = cosine_distances(cand_vecs, base_vecs)
+    return distances.mean(axis=1)
 
-    cat_features = enc.fit_transform(df[categorical_cols])
-    num_features = scaled.fit_transform(df[numerical_cols])
+def jaccard_diversity_score(df: pd.DataFrame, columns: list) -> np.ndarray:
+    scores = []
+    for idx, row in df.iterrows():
+        similarity_sum = 0
+        comparisons = 0
+        for jdx, other in df.iterrows():
+            if idx == jdx:
+                continue
+            similarity = sum(row[col] == other[col] for col in columns if col in df.columns)
+            similarity_sum += similarity
+            comparisons += 1
+        scores.append(1 - (similarity_sum / (comparisons * len(columns))) if comparisons > 0 else 0)
+    return np.array(scores)
 
-    return np.hstack([cat_features, num_features])
+def score_buyability(candidates: pd.DataFrame, brand_history: pd.DataFrame, competitors: pd.DataFrame) -> pd.DataFrame:
+    # Streamlit sliders for interactive weight control
+    st.sidebar.markdown("### 🧮 Weight Settings")
+    wt_brand = st.sidebar.slider("Newness to Brand", 0.0, 1.0, 0.2)
+    wt_market = st.sidebar.slider("Newness to Market", 0.0, 1.0, 0.4)
+    wt_variety = st.sidebar.slider("Variety", 0.0, 1.0, 0.2)
+    wt_completeness = st.sidebar.slider("Completeness", 0.0, 1.0, 0.2)
 
-def compute_distance_matrix(A, B):
-    return cosine_distances(A, B)
+    candidates = candidates.copy()
 
-def compute_variety_score(option_features):
-    # Measure how distinct items are from each other
-    dists = cosine_distances(option_features)
-    avg_distance = np.mean(dists)
-    return avg_distance
+    # Core attribute columns used in extraction
+    attribute_cols = [
+        'color', 'material', 'style', 'length', 'pattern',
+        'neckline', 'sleeve_type', 'fit', 'occasion', 'print_type'
+    ]
+    used_columns = [col for col in attribute_cols if col in candidates.columns]
 
-def compute_completeness_score(df, attr_cols):
-    completeness_score = 0
-    for col in attr_cols:
-        val_counts = df[col].nunique()
-        completeness_score += val_counts
-    max_possible = len(attr_cols) * 5  # assuming good coverage if at least 5 values/attr
-    return min(completeness_score / max_possible, 1.0)
+    # Distance-based scores
+    brand_dist = tfidf_cosine_distance(brand_history['product_name'], candidates['product_name'])
+    market_dist = tfidf_cosine_distance(competitors['product_name'], candidates['product_name'])
 
-def calculate_buyability_score(candidate_df, past_brand_df, market_df, attr_cols, numerical_cols):
-    candidate_feats = preprocess_features(candidate_df, attr_cols, numerical_cols)
-    brand_feats = preprocess_features(past_brand_df, attr_cols, numerical_cols)
-    market_feats = preprocess_features(market_df, attr_cols, numerical_cols)
+    # Variety score
+    variety_score = jaccard_diversity_score(candidates, used_columns)
 
-    # Newness to Brand (lower similarity = higher score)
-    brand_dist = np.mean(compute_distance_matrix(candidate_feats, brand_feats), axis=1)
-
-    # Newness to Market
-    market_dist = np.mean(compute_distance_matrix(candidate_feats, market_feats), axis=1)
-
-    # Variety (overall)
-    variety = compute_variety_score(candidate_feats)
-
-    # Completeness (attribute coverage)
-    completeness = compute_completeness_score(candidate_df, attr_cols)
-
-    # Final Weighted Score
-    scores = (
-        0.2 * brand_dist +
-        0.4 * market_dist +
-        0.2 * variety +
-        0.2 * completeness
+    # Completeness score: attribute coverage
+    attr_spread = candidates[used_columns].nunique() / len(candidates)
+    completeness_score = candidates.apply(
+        lambda row: sum(row[col] in candidates[col].unique() for col in used_columns) / len(used_columns), axis=1
     )
-    candidate_df['buyability_score'] = scores
-    return candidate_df.sort_values(by='buyability_score', ascending=False)
-# Implement distance-based buyability scoring here using brand and market comparison
+
+    # Normalize all scores to [0, 1]
+    def normalize(arr): return (arr - np.min(arr)) / (np.max(arr) - np.min(arr) + 1e-5)
+
+    norm_brand = normalize(brand_dist)
+    norm_market = normalize(market_dist)
+    norm_variety = normalize(variety_score)
+    norm_completeness = normalize(completeness_score)
+
+    # Final weighted buyability score
+    candidates['buyability_score'] = (
+        wt_brand * norm_brand +
+        wt_market * norm_market +
+        wt_variety * norm_variety +
+        wt_completeness * norm_completeness
+    )
+
+    # Optional: break out scores for debugging
+    candidates['score_brand'] = norm_brand
+    candidates['score_market'] = norm_market
+    candidates['score_variety'] = norm_variety
+    candidates['score_completeness'] = norm_completeness
+
+    return candidates.sort_values(by='buyability_score', ascending=False)
