@@ -25,7 +25,8 @@ with st.sidebar:
                 brand = st.selectbox(f"Brand {i+1}", ["H&M", "Zara", "MaxFashion", "Splash", "Shein"], key=f"brand_{i}")
             with col2:
                 url = st.text_input(f"Category URL {i+1}", key=f"url_{i}")
-            brand_inputs.append((brand, url))
+            if url:
+                brand_inputs.append((brand, url))
         scrape_trigger = st.button("🔍 Scrape Brand Data")
 
     with st.expander("2. Upload Candidate Designs"):
@@ -46,9 +47,8 @@ with col1:
             st.success("Scraping completed!")
 
     if candidate_files:
-        candidate_data = load_uploaded_images(candidate_files)
         with st.spinner("Extracting candidate attributes..."):
-            candidate_data = enrich_and_export_attributes(candidate_data, export_path="candidate_attributes.csv")
+            candidate_data = enrich_and_export_attributes(candidate_files)
 
         for brand, df in brand_data.items():
             brand_data[brand] = enrich_and_export_attributes(df)
@@ -64,7 +64,7 @@ with col1:
         for i, row in recommendations.iterrows():
             target_col = top_row if i < 6 else bottom_row
             with target_col[i % 6]:
-                st.image(row["image_path"], use_column_width=True, caption=f"Score: {row['buyability_score']:.2f}")
+                st.image(row.get("image_path", ""), use_column_width=True, caption=f"Score: {row['buyability_score']:.2f}")
 
         st.divider()
         st.subheader("📊 Visual Insights")
