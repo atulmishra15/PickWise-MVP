@@ -17,6 +17,20 @@ def init_driver():
     driver = webdriver.Chrome(options=chrome_options)
     return driver
 
+def detect_brand_from_url(url):
+    domain = urlparse(url).netloc.lower()
+    if "zara" in domain:
+        return "Zara"
+    elif "hm.com" in domain:
+        return "H&M"
+    elif "shein" in domain:
+        return "Shein"
+    elif "maxfashion" in domain:
+        return "MaxFashion"
+    elif "splash" in domain:
+        return "Splash"
+    else:
+        return "Unknown"
 
 def scrape_zara(url):
     driver = init_driver()
@@ -133,11 +147,12 @@ def scrape_splash(url):
     return pd.DataFrame(items)
 
 
-def scrape_all_sources(brand_url_pairs):
+def scrape_all_sources(url_list):
     all_data = {}
-    for brand, url in brand_url_pairs:
+    for url in url_list:
         if not url:
             continue
+        brand = detect_brand_from_url(url)
         try:
             if brand == "Zara":
                 df = scrape_zara(url)
