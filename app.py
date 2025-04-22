@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from scraper import scrape_all_sources
 from attribute_extractor import enrich_attributes
-from scoring import compute_buyability_scores
+from buyability_score import compute_buyability_scores
 from recommendation import recommend_top_n
 from visualizer import (
     visualize_heatmap,
