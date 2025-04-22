@@ -21,15 +21,36 @@ category = st.selectbox("Select Category", ["Dresses", "T-Shirts", "Handbags", "
 gender = st.selectbox("Select Gender", ["Women", "Men", "Girls", "Boys"])
 season = st.selectbox("Select Season", ["SS", "FW", "Transitional"])
 
-st.markdown("### Enter product listing URLs (multiple URLs per brand can be separated by commas):")
-urls = {}
-urls["maxfashion_new"] = st.text_input("Max Fashion - New Designs URLs (comma-separated)")
-urls["maxfashion_past"] = st.text_input("Max Fashion - Past Designs URLs (comma-separated)")
-urls["shein_new"] = st.text_input("Shein - New Designs URLs (comma-separated)")
-urls["shein"] = st.text_input("Shein - Market URLs (comma-separated)")
-urls["hnm"] = st.text_input("H&M - Market URLs (comma-separated)")
-urls["zara"] = st.text_input("Zara - Market URLs (comma-separated)")
-urls["splash"] = st.text_input("Splash - Market URLs (comma-separated)")
+from PIL import Image
+import requests
+from io import BytesIO
+
+# Brand logo mapping (you can update these URLs to better ones if needed)
+brand_logos = {
+    "Max Fashion - New": "https://upload.wikimedia.org/wikipedia/commons/7/7e/Max_Fashion_Logo.png",
+    "Max Fashion - Past": "https://upload.wikimedia.org/wikipedia/commons/7/7e/Max_Fashion_Logo.png",
+    "Shein - New": "https://upload.wikimedia.org/wikipedia/commons/f/fd/SHEIN_logo.png",
+    "Shein": "https://upload.wikimedia.org/wikipedia/commons/f/fd/SHEIN_logo.png",
+    "H&M": "https://upload.wikimedia.org/wikipedia/commons/5/53/H%26M-Logo.svg",
+    "Zara": "https://upload.wikimedia.org/wikipedia/commons/5/5c/Zara_Logo_2019.png",
+    "Splash": "https://upload.wikimedia.org/wikipedia/commons/d/d7/Splash_Fashions_logo.png"
+}
+
+# URL input
+url_input_count = st.number_input("How many URLs do you want to input?", min_value=1, max_value=20, value=5)
+for i in range(url_input_count):
+    col1, col2, col3 = st.columns([1, 0.5, 3])
+    with col1:
+        brand = st.selectbox(f"Brand {i+1}", brand_options, key=f"brand_{i}")
+    with col2:
+        if brand in brand_logos:
+            response = requests.get(brand_logos[brand])
+            logo_img = Image.open(BytesIO(response.content))
+            st.image(logo_img, width=50)
+    with col3:
+        url = st.text_input(f"URL for {brand}", key=f"url_{i}")
+    if url:
+        user_urls.append((brand, url))
 
 uploaded_candidates = st.file_uploader("Upload Candidate Designs (CSV file)", type=["csv"])
 
