@@ -1,0 +1,1 @@
+# Add your real attribute extraction logic from uploaded product images

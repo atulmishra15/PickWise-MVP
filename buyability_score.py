@@ -1,0 +1,1 @@
+# Implement distance-based buyability scoring here using brand and market comparison

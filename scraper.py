@@ -1,0 +1,1 @@
+# Add your real scraping logic here for top 100 competitor products from Max, Splash, Shein, H&M, Zara
