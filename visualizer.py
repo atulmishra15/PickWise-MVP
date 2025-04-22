@@ -71,7 +71,50 @@ def plot_market_comparison(candidates_df, competitors_df):
             comp_counts = competitors_df[attr].value_counts()
             combined = pd.DataFrame({
                 "Candidates": cand_counts,
-                "Competitors": comp_counts
+                "Competitors": comp_countsimport matplotlib.pyplot as plt
+import seaborn as sns
+import pandas as pd
+import streamlit as st
+
+def visualize_buyability_breakdown(scored_candidates: pd.DataFrame):
+    """Displays bar chart of buyability scores broken down by candidate."""
+    if scored_candidates is None or scored_candidates.empty:
+        st.warning("No candidate scores available for visualization.")
+        return
+
+    scored_candidates_sorted = scored_candidates.sort_values(by="buyability_score", ascending=False)
+    plt.figure(figsize=(10, 6))
+    sns.barplot(x="image_name", y="buyability_score", data=scored_candidates_sorted, palette="viridis")
+    plt.xticks(rotation=45, ha="right")
+    plt.title("Buyability Score per Candidate")
+    plt.xlabel("Candidate")
+    plt.ylabel("Score")
+    st.pyplot(plt.gcf())
+    plt.clf()
+
+def visualize_candidate_vs_market(candidates: pd.DataFrame, market: pd.DataFrame):
+    """Displays attribute heatmap comparing candidate vs brand-market distribution."""
+    if candidates.empty or market.empty:
+        st.warning("Insufficient data for candidate vs market visualization.")
+        return
+
+    comparison_attributes = ["color", "length", "style", "material", "pattern", "sleeve_type", "neckline"]
+    candidate_summary = candidates[comparison_attributes].apply(lambda x: x.value_counts()).fillna(0)
+    market_summary = market[comparison_attributes].apply(lambda x: x.value_counts()).fillna(0)
+
+    # Normalize for better comparison
+    candidate_summary_norm = candidate_summary.div(candidate_summary.sum(axis=0), axis=1).fillna(0)
+    market_summary_norm = market_summary.div(market_summary.sum(axis=0), axis=1).fillna(0)
+
+    combined = pd.concat([candidate_summary_norm.add_suffix(" (Candidate)"),
+                          market_summary_norm.add_suffix(" (Market)")], axis=1).fillna(0)
+
+    plt.figure(figsize=(12, 8))
+    sns.heatmap(combined, annot=True, cmap="YlGnBu", fmt=".2f", linewidths=.5)
+    plt.title("Candidate vs Market Attribute Distribution")
+    st.pyplot(plt.gcf())
+    plt.clf()
+
             }).fillna(0)
             combined.plot(kind="bar", ax=ax)
             ax.set_title(f"{attr.capitalize()} Comparison")
