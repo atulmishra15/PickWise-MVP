@@ -1,95 +1,161 @@
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException
+import time
 import pandas as pd
-import requests
-from bs4 import BeautifulSoup
-from typing import List, Tuple
+from urllib.parse import urlparse
 
-def scrape_hnm(url: str) -> pd.DataFrame:
-    # Example H&M scraping logic
+
+def init_driver():
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--no-sandbox")
+    driver = webdriver.Chrome(options=chrome_options)
+    return driver
+
+
+def scrape_zara(url):
+    driver = init_driver()
+    driver.get(url)
+    time.sleep(3)  # Wait for JS to load
     items = []
-    response = requests.get(url)
-    soup = BeautifulSoup(response.content, 'html.parser')
-    for item in soup.select(".product-item"):
-        items.append({
-            "name": item.select_one(".item-heading").text.strip() if item.select_one(".item-heading") else "",
-            "price": item.select_one(".item-price").text.strip() if item.select_one(".item-price") else "",
-            "brand": "H&M"
-        })
+    try:
+        product_elements = WebDriverWait(driver, 10).until(
+            EC.presence_of_all_elements_located((By.CSS_SELECTOR, 'a.product-link'))
+        )
+        for el in product_elements[:150]:
+            try:
+                name = el.get_attribute("aria-label")
+                link = el.get_attribute("href")
+                image = el.find_element(By.CSS_SELECTOR, 'img').get_attribute("src")
+                items.append({"name": name, "url": link, "image_url": image, "brand": "Zara"})
+            except Exception as e:
+                continue
+    except TimeoutException:
+        print("Timeout while scraping Zara")
+    driver.quit()
     return pd.DataFrame(items)
 
-def scrape_zara(url: str) -> pd.DataFrame:
+
+def scrape_hm(url):
+    driver = init_driver()
+    driver.get(url)
+    time.sleep(3)
     items = []
-    response = requests.get(url)
-    soup = BeautifulSoup(response.content, 'html.parser')
-    for item in soup.select(".product-grid-product-info"):
-        items.append({
-            "name": item.select_one(".name").text.strip() if item.select_one(".name") else "",
-            "price": item.select_one(".price").text.strip() if item.select_one(".price") else "",
-            "brand": "Zara"
-        })
+    try:
+        product_elements = WebDriverWait(driver, 10).until(
+            EC.presence_of_all_elements_located((By.CSS_SELECTOR, 'li.product-item'))
+        )
+        for el in product_elements[:150]:
+            try:
+                name = el.find_element(By.CSS_SELECTOR, 'a.product-item-link').text
+                link = el.find_element(By.CSS_SELECTOR, 'a.product-item-link').get_attribute("href")
+                image = el.find_element(By.CSS_SELECTOR, 'img.product-image-photo').get_attribute("src")
+                items.append({"name": name, "url": link, "image_url": image, "brand": "H&M"})
+            except Exception as e:
+                continue
+    except TimeoutException:
+        print("Timeout while scraping H&M")
+    driver.quit()
     return pd.DataFrame(items)
 
-def scrape_maxfashion(url: str, is_new: bool = False) -> pd.DataFrame:
+
+def scrape_shein(url):
+    driver = init_driver()
+    driver.get(url)
+    time.sleep(3)
     items = []
-    response = requests.get(url)
-    soup = BeautifulSoup(response.content, 'html.parser')
-    for item in soup.select(".product-tile"):
-        items.append({
-            "name": item.select_one(".product-name").text.strip() if item.select_one(".product-name") else "",
-            "price": item.select_one(".product-price").text.strip() if item.select_one(".product-price") else "",
-            "brand": "Max Fashion",
-            "is_new": is_new
-        })
+    try:
+        product_elements = WebDriverWait(driver, 10).until(
+            EC.presence_of_all_elements_located((By.CSS_SELECTOR, 'div.shein-goods-item'))
+        )
+        for el in product_elements[:150]:
+            try:
+                name = el.get_attribute("title")
+                link = el.find_element(By.CSS_SELECTOR, 'a').get_attribute("href")
+                image = el.find_element(By.CSS_SELECTOR, 'img').get_attribute("src")
+                items.append({"name": name, "url": link, "image_url": image, "brand": "Shein"})
+            except Exception as e:
+                continue
+    except TimeoutException:
+        print("Timeout while scraping Shein")
+    driver.quit()
     return pd.DataFrame(items)
 
-def scrape_splash(url: str) -> pd.DataFrame:
+
+def scrape_maxfashion(url):
+    driver = init_driver()
+    driver.get(url)
+    time.sleep(3)
     items = []
-    response = requests.get(url)
-    soup = BeautifulSoup(response.content, 'html.parser')
-    for item in soup.select(".product-info"):
-        items.append({
-            "name": item.select_one(".product-title").text.strip() if item.select_one(".product-title") else "",
-            "price": item.select_one(".product-price").text.strip() if item.select_one(".product-price") else "",
-            "brand": "Splash"
-        })
+    try:
+        product_elements = WebDriverWait(driver, 10).until(
+            EC.presence_of_all_elements_located((By.CSS_SELECTOR, 'div.product-item'))
+        )
+        for el in product_elements[:150]:
+            try:
+                name = el.find_element(By.CSS_SELECTOR, 'a.name').text
+                link = el.find_element(By.CSS_SELECTOR, 'a.name').get_attribute("href")
+                image = el.find_element(By.CSS_SELECTOR, 'img').get_attribute("src")
+                items.append({"name": name, "url": link, "image_url": image, "brand": "MaxFashion"})
+            except Exception as e:
+                continue
+    except TimeoutException:
+        print("Timeout while scraping MaxFashion")
+    driver.quit()
     return pd.DataFrame(items)
 
-def scrape_shein(url: str, is_new: bool = False) -> pd.DataFrame:
+
+def scrape_splash(url):
+    driver = init_driver()
+    driver.get(url)
+    time.sleep(3)
     items = []
-    response = requests.get(url)
-    soup = BeautifulSoup(response.content, 'html.parser')
-    for item in soup.select(".S-product-item"):
-        items.append({
-            "name": item.select_one(".S-product-item__name").text.strip() if item.select_one(".S-product-item__name") else "",
-            "price": item.select_one(".S-product-item__price").text.strip() if item.select_one(".S-product-item__price") else "",
-            "brand": "Shein",
-            "is_new": is_new
-        })
+    try:
+        product_elements = WebDriverWait(driver, 10).until(
+            EC.presence_of_all_elements_located((By.CSS_SELECTOR, 'div.product-tile'))
+        )
+        for el in product_elements[:150]:
+            try:
+                name = el.find_element(By.CSS_SELECTOR, 'a.name-link').text
+                link = el.find_element(By.CSS_SELECTOR, 'a.name-link').get_attribute("href")
+                image = el.find_element(By.CSS_SELECTOR, 'img').get_attribute("src")
+                items.append({"name": name, "url": link, "image_url": image, "brand": "Splash"})
+            except Exception as e:
+                continue
+    except TimeoutException:
+        print("Timeout while scraping Splash")
+    driver.quit()
     return pd.DataFrame(items)
 
-def scrape_all_sources(category: str, gender: str, season: str, urls: dict) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    df_new = pd.DataFrame()
-    if "maxfashion_new" in urls:
-        df_new = scrape_maxfashion(urls["maxfashion_new"], is_new=True)
-    elif "shein_new" in urls:
-        df_new = scrape_shein(urls["shein_new"], is_new=True)
-    df_new["source"] = "candidate"
 
-    df_past = pd.DataFrame()
-    if "maxfashion_past" in urls:
-        df_past = scrape_maxfashion(urls["maxfashion_past"], is_new=False)
-    df_past["source"] = "brand_past"
-
-    comp_dfs = []
-    if "hnm" in urls:
-        comp_dfs.append(scrape_hnm(urls["hnm"]))
-    if "zara" in urls:
-        comp_dfs.append(scrape_zara(urls["zara"]))
-    if "splash" in urls:
-        comp_dfs.append(scrape_splash(urls["splash"]))
-    if "shein" in urls:
-        comp_dfs.append(scrape_shein(urls["shein"]))
-
-    df_comp = pd.concat(comp_dfs, ignore_index=True) if comp_dfs else pd.DataFrame()
-    df_comp["source"] = "competitor"
-
-    return df_new, df_past, df_comp
+def scrape_all_sources(brand_url_pairs):
+    all_data = {}
+    for brand, url in brand_url_pairs:
+        if not url:
+            continue
+        try:
+            if brand == "Zara":
+                df = scrape_zara(url)
+            elif brand == "H&M":
+                df = scrape_hm(url)
+            elif brand == "Shein":
+                df = scrape_shein(url)
+            elif brand == "MaxFashion":
+                df = scrape_maxfashion(url)
+            elif brand == "Splash":
+                df = scrape_splash(url)
+            else:
+                df = pd.DataFrame()
+            if not df.empty:
+                if brand not in all_data:
+                    all_data[brand] = df
+                else:
+                    all_data[brand] = pd.concat([all_data[brand], df], ignore_index=True)
+        except Exception as e:
+            print(f"Error scraping {brand}: {e}")
+    return all_data
