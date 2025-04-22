@@ -1,35 +1,141 @@
+# scraper.py
+
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
+import re
 
-HEADERS = {"User-Agent": "Mozilla/5.0"}
+HEADERS = {
+    "User-Agent": "Mozilla/5.0"
+}
+
+def scrape_hm(category_url, max_items=150):
+    products = []
+    page = 1
+    while len(products) < max_items:
+        url = f"{category_url}?page-size=60&page={page}"
+        res = requests.get(url, headers=HEADERS)
+        soup = BeautifulSoup(res.text, "html.parser")
+        items = soup.select(".product-item")
+        if not items:
+            break
+        for item in items:
+            try:
+                title = item.select_one(".item-heading").get_text(strip=True)
+                img = item.select_one("img")["src"]
+                price = item.select_one(".price").get_text(strip=True)
+                products.append({
+                    "brand": "H&M",
+                    "title": title,
+                    "image": img,
+                    "price": price
+                })
+            except:
+                continue
+        page += 1
+    return products[:max_items]
+
+
+def scrape_zara(category_url, max_items=150):
+    products = []
+    try:
+        res = requests.get(category_url, headers=HEADERS)
+        json_text = re.search(r'window\.__PRELOADED_STATE__ = (.*?);\n', res.text)
+        if json_text:
+            data = json.loads(json_text.group(1))
+            items = data.get("productList", {}).get("products", [])
+            for item in items[:max_items]:
+                products.append({
+                    "brand": "Zara",
+                    "title": item.get("name"),
+                    "image": item.get("images", [{}])[0].get("url"),
+                    "price": item.get("price", {}).get("formattedValue")
+                })
+    except Exception as e:
+        print("Zara error:", e)
+    return products
+
 
 def scrape_maxfashion(category_url, max_items=150):
     products = []
-    # Example structure; you would replace with actual selectors
-    for page in range(1, 10):
-        response = requests.get(f"{category_url}?page={page}", headers=HEADERS)
-        soup = BeautifulSoup(response.text, "lxml")
-        items = soup.select(".product")  # example selector
-        for item in items:
-            title = item.select_one(".product-title").get_text(strip=True)
-            price = item.select_one(".product-price").get_text(strip=True)
+    res = requests.get(category_url, headers=HEADERS)
+    soup = BeautifulSoup(res.text, "html.parser")
+    items = soup.select("div.product")
+    for item in items[:max_items]:
+        try:
+            title = item.select_one(".product-name").get_text(strip=True)
             img = item.select_one("img")["src"]
-            products.append({"brand": "Max", "title": title, "price": price, "image": img})
-            if len(products) >= max_items:
-                return pd.DataFrame(products)
-    return pd.DataFrame(products)
+            price = item.select_one(".product-price").get_text(strip=True)
+            products.append({
+                "brand": "MaxFashion",
+                "title": title,
+                "image": img,
+                "price": price
+            })
+        except:
+            continue
+    return products
 
-def scrape_shein(category_url, max_items=150):
-    # Example structure; replace selectors with actual ones
-    return pd.DataFrame([{"brand": "Shein", "title": "Sample", "price": "40 AED", "image": "img.jpg"}]*max_items)
 
 def scrape_splash(category_url, max_items=150):
-    return pd.DataFrame([{"brand": "Splash", "title": "Sample", "price": "50 AED", "image": "img.jpg"}]*max_items)
+    products = []
+    res = requests.get(category_url, headers=HEADERS)
+    soup = BeautifulSoup(res.text, "html.parser")
+    items = soup.select("div.product-tile")
+    for item in items[:max_items]:
+        try:
+            title = item.select_one(".product-name").get_text(strip=True)
+            img = item.select_one("img")["src"]
+            price = item.select_one(".product-price").get_text(strip=True)
+            products.append({
+                "brand": "Splash",
+                "title": title,
+                "image": img,
+                "price": price
+            })
+        except:
+            continue
+    return products
 
-def scrape_hnm(category_url, max_items=150):
-    return pd.DataFrame([{"brand": "H&M", "title": "Sample", "price": "60 AED", "image": "img.jpg"}]*max_items)
 
-def scrape_zara(category_url, max_items=150):
-    return pd.DataFrame([{"brand": "Zara", "title": "Sample", "price": "80 AED", "image": "img.jpg"}]*max_items)
-# Add your real scraping logic here for top 100 competitor products from Max, Splash, Shein, H&M, Zara
+def scrape_shein(category_url, max_items=150):
+    products = []
+    page = 1
+    while len(products) < max_items:
+        paged_url = f"{category_url}&page={page}"
+        res = requests.get(paged_url, headers=HEADERS)
+        soup = BeautifulSoup(res.text, "html.parser")
+        items = soup.select("section.S-product-item")
+        if not items:
+            break
+        for item in items:
+            try:
+                title = item.get("aria-label")
+                img = item.select_one("img")["src"]
+                price = item.select_one(".S-price").get_text(strip=True)
+                products.append({
+                    "brand": "Shein",
+                    "title": title,
+                    "image": img,
+                    "price": price
+                })
+            except:
+                continue
+        page += 1
+    return products[:max_items]
+
+
+def scrape_all(brand, category_url, max_items=150):
+    brand = brand.lower()
+    if brand == "h&m":
+        return scrape_hm(category_url, max_items)
+    elif brand == "zara":
+        return scrape_zara(category_url, max_items)
+    elif brand == "maxfashion":
+        return scrape_maxfashion(category_url, max_items)
+    elif brand == "splash":
+        return scrape_splash(category_url, max_items)
+    elif brand == "shein":
+        return scrape_shein(category_url, max_items)
+    else:
+        raise ValueError("Unsupported brand")
