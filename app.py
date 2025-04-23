@@ -3,7 +3,8 @@ from PIL import Image
 import os
 import pandas as pd
 from attribute_extractor import extract_attributes_from_image
-from buyability_score import compute_buyability_scores, recommend_top_n, visualize_comparison
+from buyability_score import compute_buyability_scores, recommend_top_n
+import matplotlib.pyplot as plt
 
 st.set_page_config(page_title="PickWise – Smarter Choices. Sharper Assortments.", layout="wide")
 st.title("🛍️ PickWise – Smarter Choices. Sharper Assortments.")
@@ -60,6 +61,15 @@ if st.sidebar.button("🔍 Run PickWise Analysis") and comp_images and cand_imag
             st.markdown(f"**Score:** {item['buyability_score']:.2f}<br>**Attributes:** {item.drop(['image', 'name', 'buyability_score']).to_dict()}", unsafe_allow_html=True)
 
     st.subheader("🖼️ Visual Comparison")
+    def visualize_comparison(scored_df, df_competitors):
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.hist(scored_df['buyability_score'], bins=10, alpha=0.7, label='Candidates', color='skyblue')
+        ax.set_title('Buyability Score Distribution')
+        ax.set_xlabel('Score')
+        ax.set_ylabel('Frequency')
+        ax.legend()
+        return fig
+
     fig = visualize_comparison(scored_df, df_competitors)
     st.pyplot(fig)
 
