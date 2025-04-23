@@ -1,3 +1,5 @@
+import spacy.cli
+spacy.cli.download("en_core_web_sm")
 import streamlit as st
 from PIL import Image
 import os
