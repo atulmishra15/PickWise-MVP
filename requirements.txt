@@ -10,8 +10,7 @@ webdriver-manager==4.0.1
 beautifulsoup4==4.12.3
 requests==2.31.0
 lxml==5.2.1
-torch==2.1.2
+torch==2.5.1
 torchvision==0.16.2
 transformers==4.39.3
 spacy==3.7.4
-
