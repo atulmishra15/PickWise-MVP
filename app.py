@@ -30,6 +30,7 @@ if st.sidebar.button("🔍 Run PickWise Analysis") and comp_images and cand_imag
         attrs = extract_attributes_from_image(image)
         attrs["image"] = image
         attrs["name"] = img.name
+        attrs["design_description"] = " ".join(str(v) for k, v in attrs.items() if k not in ["image", "name"])
         comp_data.append(attrs)
 
     cand_data = []
@@ -38,6 +39,7 @@ if st.sidebar.button("🔍 Run PickWise Analysis") and comp_images and cand_imag
         attrs = extract_attributes_from_image(image)
         attrs["image"] = image
         attrs["name"] = img.name
+        attrs["design_description"] = " ".join(str(v) for k, v in attrs.items() if k not in ["image", "name"])
         cand_data.append(attrs)
 
     st.success("Attributes extracted for all images!")
