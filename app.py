@@ -1,8 +1,9 @@
 import streamlit as st
 from PIL import Image
 import os
+import pandas as pd
 from attribute_extractor import extract_attributes_from_image
-from buyability_score import score_candidate_products, visualize_comparison
+from buyability_score import compute_buyability_scores, recommend_top_n, visualize_comparison
 
 st.set_page_config(page_title="PickWise – Smarter Choices. Sharper Assortments.", layout="wide")
 st.title("🛍️ PickWise – Smarter Choices. Sharper Assortments.")
@@ -26,29 +27,40 @@ if st.sidebar.button("🔍 Run PickWise Analysis") and comp_images and cand_imag
     for img in comp_images:
         image = Image.open(img)
         attrs = extract_attributes_from_image(image)
-        comp_data.append({"name": img.name, "attributes": attrs, "image": image})
+        attrs["image"] = image
+        attrs["name"] = img.name
+        comp_data.append(attrs)
 
     cand_data = []
     for img in cand_images:
         image = Image.open(img)
         attrs = extract_attributes_from_image(image)
-        cand_data.append({"name": img.name, "attributes": attrs, "image": image})
+        attrs["image"] = image
+        attrs["name"] = img.name
+        cand_data.append(attrs)
 
     st.success("Attributes extracted for all images!")
 
     st.subheader("📊 Scoring Candidate Designs")
-    scored_candidates = score_candidate_products(cand_data, comp_data)
+    df_candidates = pd.DataFrame(cand_data)
+    df_competitors = pd.DataFrame(comp_data)
+
+    # For now, use empty DataFrame as past brand products placeholder
+    df_past = pd.DataFrame(columns=df_candidates.columns)
+
+    scored_df = compute_buyability_scores(df_candidates, df_past, df_competitors)
+    top_recommendations = recommend_top_n(scored_df, n=12)
 
     st.subheader("🏆 Top Recommendations")
-    for item in scored_candidates[:12]:
+    for _, item in top_recommendations.iterrows():
         col1, col2 = st.columns([1, 3])
         with col1:
             st.image(item['image'], caption=item['name'], width=150)
         with col2:
-            st.markdown(f"**Score:** {item['score']:.2f}<br>**Attributes:** {item['attributes']}", unsafe_allow_html=True)
+            st.markdown(f"**Score:** {item['buyability_score']:.2f}<br>**Attributes:** {item.drop(['image', 'name', 'buyability_score']).to_dict()}", unsafe_allow_html=True)
 
     st.subheader("🖼️ Visual Comparison")
-    fig = visualize_comparison(scored_candidates, comp_data)
+    fig = visualize_comparison(scored_df, df_competitors)
     st.pyplot(fig)
 
 else:
