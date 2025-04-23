@@ -7,7 +7,7 @@ from buyability_score import compute_buyability_scores, recommend_top_n
 import matplotlib.pyplot as plt
 
 st.set_page_config(page_title="PickWise – Smarter Choices. Sharper Assortments.", layout="wide")
-st.title("🛍️ PickWise – Smarter Choices. Sharper Assortments.")
+st.title("🛒️ PickWise – Smarter Choices. Sharper Assortments.")
 
 st.markdown("Upload your **competitor products** and **candidate designs** to get buyability scores and recommendations.")
 
@@ -48,7 +48,9 @@ if st.sidebar.button("🔍 Run PickWise Analysis") and comp_images and cand_imag
     df_candidates = pd.DataFrame(cand_data)
     df_competitors = pd.DataFrame(comp_data)
 
-    # For now, use empty DataFrame as past brand products placeholder
+    df_candidates['design_description'] = df_candidates.get('design_description', pd.Series("", index=df_candidates.index))
+    df_competitors['design_description'] = df_competitors.get('design_description', pd.Series("", index=df_competitors.index))
+
     df_past = pd.DataFrame(columns=df_candidates.columns)
 
     def normalize(series):
@@ -67,11 +69,14 @@ if st.sidebar.button("🔍 Run PickWise Analysis") and comp_images and cand_imag
 
     st.subheader("🏆 Top Recommendations")
     for _, item in top_recommendations.iterrows():
-        col1, col2 = st.columns([1, 3])
-        with col1:
-            st.image(item['image'], caption=item['name'], width=150)
-        with col2:
-            st.markdown(f"**Score:** {item['buyability_score']:.2f}<br>**Attributes:** {item.drop(['image', 'name', 'buyability_score']).to_dict()}", unsafe_allow_html=True)
+        with st.container():
+            cols = st.columns([1, 2, 5])
+            with cols[0]:
+                st.image(item['image'], caption=item['name'], width=150)
+            with cols[1]:
+                st.metric(label="Score", value=f"{item['buyability_score']:.2f}")
+            with cols[2]:
+                st.markdown("<br>" + "<br>".join([f"**{k}:** {v}" for k, v in item.drop(['image', 'name', 'buyability_score']).to_dict().items()]), unsafe_allow_html=True)
 
     st.subheader("🖼️ Visual Comparison")
     def visualize_comparison(scored_df, df_competitors):
