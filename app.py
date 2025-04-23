@@ -1,78 +1,55 @@
 import streamlit as st
-import pandas as pd
-from attribute_extractor import enrich_attributes_from_images as enrich_and_export_attributes
-from scraper import scrape_all_sources, detect_brand_from_url
-from buyability_score import compute_buyability_scores, recommend_top_n
-from visualizer import visualize_buyability_breakdown, visualize_candidate_vs_market, visualize_brand_vs_brand
+from PIL import Image
+import os
+from attribute_extractor import extract_attributes_from_image
+from buyability_score import score_candidate_products, visualize_comparison
 
 st.set_page_config(page_title="PickWise – Smarter Choices. Sharper Assortments.", layout="wide")
-st.title("🧠 PickWise")
-st.caption("Smarter Choices. Sharper Assortments.")
+st.title("🛍️ PickWise – Smarter Choices. Sharper Assortments.")
 
-# Sidebar Input Section
-with st.sidebar:
-    st.header("Configure Run")
-    gender = st.selectbox("Gender", ["Women", "Men", "Kids"])
-    season = st.selectbox("Season", ["Spring", "Summer", "Autumn", "Winter"])
+st.markdown("Upload your **competitor products** and **candidate designs** to get buyability scores and recommendations.")
 
-    with st.expander("1. Scrape Brand Data"):
-        category_urls = []
-        num_urls = st.slider("Number of category URLs", 1, 5, 2)
-        for i in range(num_urls):
-            url = st.text_input(f"Category URL {i+1}", key=f"url_{i}")
-            if url:
-                category_urls.append(url)
-        scrape_trigger = st.button("🔍 Scrape Brand Data")
+# --- Upload Section ---
+st.sidebar.header("Step 1: Upload Images")
+comp_images = st.sidebar.file_uploader("Upload Competitor Product Images", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
+cand_images = st.sidebar.file_uploader("Upload Candidate Designs (Max 50)", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
 
-    with st.expander("2. Upload Candidate Designs"):
-        candidate_files = st.file_uploader("Upload design images", accept_multiple_files=True, type=["png", "jpg", "jpeg"])
-        if candidate_files:
-            st.success(f"Uploaded {len(candidate_files)} images")
+if len(cand_images) > 50:
+    st.sidebar.error("⚠️ You can upload up to 50 candidate designs only.")
+    cand_images = cand_images[:50]
 
-# Main Content Area
-col1, col2 = st.columns([2, 1])
+# --- Run Analysis Button ---
+if st.sidebar.button("🔍 Run PickWise Analysis") and comp_images and cand_images:
+    st.subheader("🔧 Extracting Attributes...")
 
-with col1:
-    brand_data = {}
-    candidate_data = None
+    comp_data = []
+    for img in comp_images:
+        image = Image.open(img)
+        attrs = extract_attributes_from_image(image)
+        comp_data.append({"name": img.name, "attributes": attrs, "image": image})
 
-    # Scraping process
-    if scrape_trigger and category_urls:
-        with st.spinner("Scraping brand data..."):
-            brand_inputs = [(detect_brand_from_url(url), url) for url in category_urls]
-            brand_data = scrape_all_sources(category_urls)
-            if not brand_data:
-                st.warning("No data scraped. Please check the category URLs and try again.")
-            else:
-                st.success("Scraping completed!")
+    cand_data = []
+    for img in cand_images:
+        image = Image.open(img)
+        attrs = extract_attributes_from_image(image)
+        cand_data.append({"name": img.name, "attributes": attrs, "image": image})
 
-    # Process candidate designs
-    if candidate_files:
-        with st.spinner("Extracting candidate attributes..."):
-            candidate_data = enrich_and_export_attributes(candidate_files)
+    st.success("Attributes extracted for all images!")
 
-        for brand, df in brand_data.items():
-            brand_data[brand] = enrich_and_export_attributes(df)
+    st.subheader("📊 Scoring Candidate Designs")
+    scored_candidates = score_candidate_products(cand_data, comp_data)
 
-    # Recommendations and visualizations
-    if candidate_data is not None and brand_data:
-        all_market_data = pd.concat(brand_data.values(), ignore_index=True)
-        scored_candidates = compute_buyability_scores(candidate_data, all_market_data)
-        recommendations = recommend_top_n(scored_candidates, top_n=12)
+    st.subheader("🏆 Top Recommendations")
+    for item in scored_candidates[:12]:
+        col1, col2 = st.columns([1, 3])
+        with col1:
+            st.image(item['image'], caption=item['name'], width=150)
+        with col2:
+            st.markdown(f"**Score:** {item['score']:.2f}<br>**Attributes:** {item['attributes']}", unsafe_allow_html=True)
 
-        st.subheader("💡 Top Recommended Candidates")
-        top_row = st.columns(6)
-        bottom_row = st.columns(6)
-        for i, row in recommendations.iterrows():
-            target_col = top_row if i < 6 else bottom_row
-            with target_col[i % 6]:
-                st.image(row.get("image_path", ""), use_column_width=True, caption=f"Score: {row['buyability_score']:.2f}")
+    st.subheader("🖼️ Visual Comparison")
+    fig = visualize_comparison(scored_candidates, comp_data)
+    st.pyplot(fig)
 
-        st.divider()
-        st.subheader("📊 Visual Insights")
-        visualize_buyability_breakdown(scored_candidates)
-        visualize_candidate_vs_market(candidate_data, all_market_data)
-        visualize_brand_vs_brand(brand_data)
-
-with col2:
-    st.info("📘 Instructions:\n\n1. Paste category URLs (we’ll detect the brand).\n2. Upload your candidate designs.\n3. See top picks and market-fit visuals!")
+else:
+    st.info("Upload images and click the button in the sidebar to begin analysis.")
