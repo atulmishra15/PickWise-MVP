@@ -51,6 +51,17 @@ if st.sidebar.button("🔍 Run PickWise Analysis") and comp_images and cand_imag
     # For now, use empty DataFrame as past brand products placeholder
     df_past = pd.DataFrame(columns=df_candidates.columns)
 
+    def normalize(series):
+        try:
+            if isinstance(series, pd.Series):
+                if series.max() == series.min():
+                    return pd.Series(0.5, index=series.index)
+                return (series - series.min()) / (series.max() - series.min())
+            else:
+                return pd.Series(series).apply(lambda x: 0.5)
+        except Exception:
+            return pd.Series(0.5, index=range(len(series)))
+
     scored_df = compute_buyability_scores(df_candidates, df_past, df_competitors)
     top_recommendations = recommend_top_n(scored_df, n=12)
 
