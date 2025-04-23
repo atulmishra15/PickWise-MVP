@@ -114,7 +114,9 @@ def compute_completeness(df):
     comp_array = np.array(comp_scores).mean()
     return np.repeat(comp_array, df.shape[0])
 
-def normalize(series):
+def normalize(series: Series) -> Series:
+    if series.empty:
+        return pd.Series(dtype=series.dtype)
     if series.max() == series.min():
         return pd.Series(0.5, index=series.index)
     return (series - series.min()) / (series.max() - series.min())
