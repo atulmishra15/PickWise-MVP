@@ -78,6 +78,7 @@ def parse_attributes_from_caption(caption: str) -> dict:
 def extract_attributes_from_image(image: Image) -> dict:
     caption = generate_caption(image)
     attributes = parse_attributes_from_caption(caption)
+    attributes['caption'] = caption
     return attributes
 
 def enrich_attributes_from_images(image_files: list) -> pd.DataFrame:
@@ -100,3 +101,22 @@ def enrich_and_export_attributes(image_files: list) -> pd.DataFrame:
     enriched_data = enrich_attributes_from_images(image_files)
     enriched_data.to_csv("candidate_attributes.csv", index=False)
     return enriched_data
+
+# Streamlit UI
+st.title("PickWise – Attribute Extractor")
+
+uploaded_files = st.file_uploader("Upload product images", accept_multiple_files=True, type=["jpg", "jpeg", "png"])
+
+if uploaded_files:
+    with st.spinner("Extracting attributes..."):
+        result_df = enrich_attributes_from_images(uploaded_files)
+        st.success("Attributes extracted successfully!")
+        st.dataframe(result_df)
+
+        csv = result_df.to_csv(index=False).encode('utf-8')
+        st.download_button("Download Attributes CSV", csv, file_name="candidate_attributes.csv", mime="text/csv")
+else:
+    st.info("Please upload images to begin.")
+
+st.markdown("---")
+st.caption("PickWise – Smarter Choices. Sharper Assortments.")
