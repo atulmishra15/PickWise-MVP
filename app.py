@@ -1,23 +1,29 @@
 import pandas as pd
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 import torch
 from torchvision import transforms
 from transformers import BlipProcessor, BlipForConditionalGeneration, CLIPProcessor, CLIPModel
 import spacy
 import spacy.cli
 import re
+import streamlit as st
 
-# Load enhanced BLIP Large model
-processor_blip = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-large")
-model_blip = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-large")
-model_blip.eval()
+# Cached model loaders for Streamlit performance
+@st.cache_resource
+def load_blip_model():
+    processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-large")
+    model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-large")
+    model.eval()
+    return processor, model
 
-# Load CLIP for backup attribute hints
-clip_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
-clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-clip_model.eval()
+@st.cache_resource
+def load_clip_model():
+    processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+    model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+    model.eval()
+    return processor, model
 
-# Load spaCy NLP model with safe fallback
+@st.cache_resource
 def load_spacy_model():
     try:
         return spacy.load("en_core_web_sm")
@@ -25,6 +31,9 @@ def load_spacy_model():
         spacy.cli.download("en_core_web_sm")
         return spacy.load("en_core_web_sm")
 
+# Load models
+processor_blip, model_blip = load_blip_model()
+clip_processor, clip_model = load_clip_model()
 nlp = load_spacy_model()
 
 categories = ['Color', 'Material', 'Style', 'SleeveType', 'Neckline', 'Pattern']
@@ -42,7 +51,7 @@ attribute_keywords = {
 def generate_caption(image: Image.Image) -> str:
     inputs = processor_blip(images=image, return_tensors="pt")
     with torch.no_grad():
-        out = model_blip.generate(**inputs)
+        out = model_blip.generate(**inputs.to("cpu"))
     caption = processor_blip.decode(out[0], skip_special_tokens=True)
     return caption
 
@@ -50,7 +59,7 @@ def generate_caption(image: Image.Image) -> str:
 def generate_clip_tags(image: Image.Image) -> list:
     inputs = clip_processor(images=image, return_tensors="pt")
     with torch.no_grad():
-        outputs = clip_model.get_image_features(**inputs)
+        outputs = clip_model.get_image_features(**inputs.to("cpu"))
     return outputs.tolist()  # Placeholder for future label projection
 
 # Parse attributes from caption using NLP
@@ -74,10 +83,15 @@ def extract_attributes_from_image(image: Image) -> dict:
 def enrich_attributes_from_images(image_files: list) -> pd.DataFrame:
     data = []
     for image_file in image_files:
-        image = Image.open(image_file)
-        attributes = extract_attributes_from_image(image)
-        attributes['image_path'] = image_file.name
-        data.append(attributes)
+        try:
+            image = Image.open(image_file)
+            attributes = extract_attributes_from_image(image)
+            attributes['image_path'] = image_file.name
+            data.append(attributes)
+        except UnidentifiedImageError:
+            st.warning(f"Could not process {image_file.name}: Unrecognized image format")
+        except Exception as e:
+            st.warning(f"Error processing {image_file.name}: {e}")
 
     df = pd.DataFrame(data)
     return df
